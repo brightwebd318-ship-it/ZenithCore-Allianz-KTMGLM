@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local scratch and testing notes
+/scratch/
+/what to test.txt
+/zenith_design.md.txt

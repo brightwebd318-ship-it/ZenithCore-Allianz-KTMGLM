@@ -1,65 +1,323 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect } from 'react';
+import { Layout } from '../components/Layout';
+import type { TabType } from '../components/Layout';
+import { OnboardingWizard } from '../components/OnboardingWizard';
+import { LoginView } from '../views/LoginView';
+import { DashboardView } from '../views/DashboardView';
+import { PatientsView } from '../views/PatientsView';
+import { AppointmentsView } from '../views/AppointmentsView';
+import { BillingView } from '../views/BillingView';
+import { InventoryView } from '../views/InventoryView';
+import { StaffView } from '../views/StaffView';
+import { SalaryView } from '../views/SalaryView';
+import { ReportsView } from '../views/ReportsView';
+import { TasksView } from '../views/TasksView';
+import { AdminControlsView } from '../views/AdminControlsView';
+import { dataService } from '../services/dataService';
+import type { Tenant, User } from '../services/dataService';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+  const [activeTab, setActiveTab] = useState<TabType>('Dashboard');
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Authentication States
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+  const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
+  const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  // Deep-linking Target States
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+
+  // Load theme preference on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('zenith_theme');
+      if (savedTheme === 'dark') {
+        setDarkMode(true);
+      } else if (!savedTheme) {
+        // Default to dark theme if user prefers system dark mode
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setDarkMode(prefersDark);
+      }
+    }
+  }, []);
+
+  // Sync theme with HTML class
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (darkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('zenith_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('zenith_theme', 'light');
+      }
+    }
+  }, [darkMode]);
+
+  // Check session on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      setIsSystemAdmin(params.get('setup') === 'true' || params.get('superadmin') === 'true');
+    }
+    if (isSupabaseConfigured && supabase) {
+      // Fetch current session
+      supabase.auth.getSession()
+        .then(({ data: { session } }) => {
+          setIsAuthenticated(!!session);
+          setAuthLoading(false);
+        })
+        .catch((err) => {
+          console.error("Auth session lookup failed:", err);
+          setIsAuthenticated(false);
+          setAuthLoading(false);
+        });
+
+      // Listen for auth state changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setIsAuthenticated(!!session);
+        setAuthLoading(false);
+        triggerRefresh();
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    } else {
+      // Mock mode session lookup
+      const session = localStorage.getItem('zenith_session');
+      if (session) {
+        try {
+          const parsed = JSON.parse(session);
+          setIsAuthenticated(!!parsed.loggedIn);
+        } catch {
+          setIsAuthenticated(false);
+        }
+      } else {
+        setIsAuthenticated(false);
+      }
+      setAuthLoading(false);
+    }
+  }, []);
+
+  const fetchTenant = async () => {
+    try {
+      const data = await dataService.getTenant();
+      setTenant(data);
+
+      const userProfile = await dataService.getCurrentUser();
+      setCurrentUser(userProfile);
+
+      if (data && data.business_name === 'Pending Setup') {
+        setIsFirstTimeSetup(true);
+        setOnboardingOpen(true);
+      } else {
+        setIsFirstTimeSetup(false);
+      }
+    } catch (err) {
+      console.error('Failed to retrieve tenant settings:', err);
+      // Auto-trigger onboarding if database is empty/not setup and user is system admin
+      if (isSystemAdmin) {
+        setOnboardingOpen(true);
+      } else {
+        // If not system admin, clear the active session so the user goes back to a clean login screen
+        handleLogout();
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchTenant();
+    }
+  }, [isAuthenticated, refreshKey]);
+
+  const triggerRefresh = () => {
+    setRefreshKey((k) => k + 1);
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (currentUser) {
+        await dataService.addAuditTrail('CONSENT_CHANGED', `User logged out: ${currentUser.email} (${currentUser.full_name})`);
+      } else {
+        const sessionStr = localStorage.getItem('zenith_session');
+        const session = sessionStr ? JSON.parse(sessionStr) : null;
+        if (session?.email) {
+          await dataService.addAuditTrail('CONSENT_CHANGED', `User logged out: ${session.email}`);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to log audit trail for logout:", err);
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      await supabase.auth.signOut();
+    } else {
+      localStorage.removeItem('zenith_session');
+      setIsAuthenticated(false);
+    }
+    setTenant(null);
+    setCurrentUser(null);
+  };
+
+  const renderActiveView = () => {
+    switch (activeTab) {
+      case 'Dashboard':
+        return (
+          <DashboardView
+            tenant={tenant}
+            setActiveTab={setActiveTab}
+            triggerRefreshKey={refreshKey}
+          />
+        );
+      case 'Patients':
+        return (
+          <PatientsView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+          />
+        );
+      case 'Appointments':
+        return (
+          <AppointmentsView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+            selectedAppointmentId={selectedAppointmentId}
+            setSelectedAppointmentId={setSelectedAppointmentId}
+          />
+        );
+      case 'Tasks':
+        return (
+          <TasksView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+            currentUser={currentUser}
+            selectedTaskId={selectedTaskId}
+            setSelectedTaskId={setSelectedTaskId}
+          />
+        );
+      case 'Billing':
+        return (
+          <BillingView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+          />
+        );
+      case 'Inventory':
+        return (
+          <InventoryView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+          />
+        );
+      case 'Staff':
+        return (
+          <StaffView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+          />
+        );
+      case 'Salary':
+        return (
+          <SalaryView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+          />
+        );
+      case 'Reports':
+        return (
+          <ReportsView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+          />
+        );
+      case 'Administrative Controls':
+        return (
+          <AdminControlsView
+            triggerRefresh={triggerRefresh}
+          />
+        );
+      default:
+        return (
+          <div className="text-center py-12 text-slate-400">
+            Select a panel from the navigation drawer.
+          </div>
+        );
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F7F9] dark:bg-[#0B0F19] transition-colors duration-200">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-500 mx-auto mb-4" />
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 font-outfit">Loading ZenithCore Alliance...</h2>
+          <p className="text-xs text-slate-400 mt-1">Verifying secure database credentials</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <LoginView
+          onLoginSuccess={() => {
+            setIsAuthenticated(true);
+            triggerRefresh();
+          }}
+          onOpenOnboarding={() => setOnboardingOpen(true)}
+          isSystemAdmin={isSystemAdmin}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        <OnboardingWizard
+          isOpen={onboardingOpen}
+          onClose={() => setOnboardingOpen(false)}
+          onSuccess={() => {
+            setIsAuthenticated(true);
+            triggerRefresh();
+          }}
+          tenantId={tenant?.id}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Layout
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        tenant={tenant}
+        onOpenOnboarding={() => setOnboardingOpen(true)}
+        onLogout={handleLogout}
+        isSystemAdmin={isSystemAdmin}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        currentUser={currentUser}
+        onNavigateToTask={(id) => setSelectedTaskId(id)}
+        onNavigateToAppointment={(id) => setSelectedAppointmentId(id)}
+      >
+        {renderActiveView()}
+      </Layout>
+
+      <OnboardingWizard
+        isOpen={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
+        onSuccess={triggerRefresh}
+        isFirstTimeSetup={isFirstTimeSetup}
+        tenantId={tenant?.id}
+      />
+    </>
   );
 }
