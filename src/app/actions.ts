@@ -1,6 +1,6 @@
 "use server";
 
-import { createServerSupabaseClient } from '../services/serverClient';
+import { createServerSupabaseClient, createAdminSupabaseClient } from '../services/serverClient';
 
 // 1. TENANTS
 export async function getTenantAction(accessToken: string) {
@@ -97,24 +97,77 @@ export async function createStaffAuthAction(
   tenantUuid?: string,
   targetUserId?: string
 ) {
-  const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase.rpc('create_user_account', {
-    user_email: userEmail,
-    user_password: password || 'ZenithMockPassword123!',
-    user_full_name: fullName || userEmail.split('@')[0],
-    user_role: role || 'Receptionist',
-    tenant_uuid: tenantUuid,
-    target_user_id: targetUserId || null
+  // 1. Authorize: Verify the caller is an Admin
+  const userClient = createServerSupabaseClient(accessToken);
+  const { data: profile, error: profileErr } = await userClient
+    .from('users')
+    .select('position_role')
+    .eq('id', (await userClient.auth.getUser()).data.user?.id)
+    .single();
+  if (profileErr || !profile || profile.position_role !== 'Admin') {
+    throw new Error("Access Denied: Only Admin users can create accounts.");
+  }
+
+  const adminClient = createAdminSupabaseClient();
+  
+  // 2. Register user into auth.users (using official Supabase Admin Auth API)
+  const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
+    email: userEmail,
+    password: password || 'ZenithMockPassword123!',
+    email_confirm: true,
+    user_metadata: { full_name: fullName || userEmail.split('@')[0] }
   });
-  if (error) throw error;
-  return data;
+  if (authErr) throw authErr;
+  if (!authData.user) throw new Error("Failed to create authentication credentials.");
+  
+  const newUserId = authData.user.id;
+
+  // 3. Link/Upsert to public profile
+  const { data, error: dbErr } = await adminClient
+    .from('users')
+    .upsert({
+      id: targetUserId || newUserId,
+      tenant_id: tenantUuid,
+      email: userEmail,
+      full_name: fullName || userEmail.split('@')[0],
+      position_role: role || 'Receptionist',
+      medical_council_registration_no: 'IMR/TEMP-STAFF',
+      can_view_personal_data: true,
+      can_view_medical_history: true,
+      can_manage_finance: false,
+      can_print_generate_invoice: true,
+      can_manage_staff: false,
+      base_salary_monthly: 45000,
+      bonus_system_enabled: false,
+      resource_fhir: {
+        resourceType: 'Practitioner',
+        active: true,
+        name: [{ text: fullName || userEmail.split('@')[0] }]
+      }
+    })
+    .select()
+    .single();
+
+  if (dbErr) throw dbErr;
+  return targetUserId || newUserId;
 }
 
 export async function pauseStaffAuthAction(accessToken: string, targetUserId: string, shouldPause: boolean) {
-  const supabase = createServerSupabaseClient(accessToken);
-  const { error } = await supabase.rpc('pause_user_account', {
-    target_user_id: targetUserId,
-    should_pause: shouldPause
+  // 1. Authorize: Verify the caller is an Admin
+  const userClient = createServerSupabaseClient(accessToken);
+  const { data: profile, error: profileErr } = await userClient
+    .from('users')
+    .select('position_role')
+    .eq('id', (await userClient.auth.getUser()).data.user?.id)
+    .single();
+  if (profileErr || !profile || profile.position_role !== 'Admin') {
+    throw new Error("Access Denied: Only Admin users can suspend/resume accounts.");
+  }
+
+  // 2. Toggle ban status using Supabase Admin Auth API
+  const adminClient = createAdminSupabaseClient();
+  const { error } = await adminClient.auth.admin.updateUserById(targetUserId, {
+    ban_duration: shouldPause ? '876000h' : 'none' // Ban for 100 years or unban
   });
   if (error) throw error;
   return true;

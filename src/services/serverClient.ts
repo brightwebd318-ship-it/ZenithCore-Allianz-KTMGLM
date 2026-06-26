@@ -29,3 +29,18 @@ export const createServerSupabaseClient = (accessToken?: string) => {
     },
   });
 };
+
+export const createAdminSupabaseClient = () => {
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  if (!supabaseUrl || !supabaseServiceRoleKey) {
+    throw new Error('Supabase URL or Service Role Key is missing on the server configuration.');
+  }
+
+  return createClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+};
+
