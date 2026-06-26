@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { UserCheck, Shield, Plus, Edit2 } from 'lucide-react';
+import { UserCheck, Shield, Plus, Edit2, Trash2 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { User as StaffUser } from '../services/dataService';
 
@@ -12,6 +12,9 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
+  
+  // Status filter state
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Paused' | 'Inactive'>('All');
 
   // New Staff member form
   const [showAddForm, setShowAddForm] = useState(false);
@@ -79,6 +82,50 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
       triggerRefresh();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleToggleActive = async (userId: string) => {
+    if (!canManageStaff) {
+      alert("Permission denied. Only staff managers or administrators can edit clearances.");
+      return;
+    }
+
+    const user = staffList.find((u) => u.id === userId);
+    if (!user) return;
+
+    try {
+      const currentActive = user.resource_fhir?.active !== false;
+      const nextActive = !currentActive;
+      const updatedResourceFhir = {
+        ...(user.resource_fhir || {}),
+        active: nextActive,
+      };
+      
+      await dataService.updateUserPermissions(userId, { resource_fhir: updatedResourceFhir });
+      await dataService.addAuditTrail('CONSENT_CHANGED', `Marked staff member ${user.full_name} as ${nextActive ? 'Active' : 'Inactive (No longer valid)'}`);
+      triggerRefresh();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteStaff = async (userId: string, name: string) => {
+    if (!canManageStaff) {
+      alert("Permission denied. Only staff managers or administrators can delete records.");
+      return;
+    }
+
+    if (!confirm(`Are you absolutely sure you want to delete ${name}? This will remove their clinical profile and credentials permanently.`)) {
+      return;
+    }
+
+    try {
+      await dataService.deleteStaffUser(userId);
+      await dataService.addAuditTrail('CONSENT_CHANGED', `Deleted staff directory profile and login credentials for: ${name}`);
+      triggerRefresh();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete staff member.");
     }
   };
 
@@ -189,6 +236,27 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
         )}
       </div>
 
+      {/* Filters Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-50 border border-slate-200/80 p-2 rounded-xl dark:bg-slate-900/50 dark:border-slate-800">
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-2 mr-2">Filter Accounts:</span>
+        {(['All', 'Active', 'Paused', 'Inactive'] as const).map((filter) => {
+          const isActive = statusFilter === filter;
+          return (
+            <button
+              key={filter}
+              onClick={() => setStatusFilter(filter)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
+                isActive
+                  ? 'bg-brand-500 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-250 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-350 dark:hover:bg-slate-750'
+              }`}
+            >
+              {filter}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Grid of Users */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {loading ? (
@@ -196,128 +264,190 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
         ) : staffList.length === 0 ? (
           <p className="text-slate-400 text-sm">No profiles found.</p>
         ) : (
-          staffList.map((user) => (
-            <div
-              key={user.id}
-              className="bg-white rounded-xl border border-slate-200 shadow-sm dark:bg-[#111827] dark:border-slate-800 p-6 flex flex-col justify-between hover:border-slate-350 transition-colors"
-            >
-              <div>
-                {/* User Header Profile */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center space-x-3.5">
-                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {user.full_name[0]}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">{user.full_name}</h4>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        <span className="text-[10px] bg-slate-50 border border-slate-150 rounded px-2 py-0.5 font-bold uppercase text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
-                          {user.position_role}
+          (() => {
+            const filteredStaff = staffList.filter((user) => {
+              const status = authStatuses.find((s) => s.id === user.id);
+              const isPaused = status?.paused === true;
+              const isActiveVal = user.resource_fhir?.active !== false;
+
+              if (statusFilter === 'Active') {
+                return isActiveVal && !isPaused;
+              }
+              if (statusFilter === 'Paused') {
+                return isPaused && isActiveVal;
+              }
+              if (statusFilter === 'Inactive') {
+                return !isActiveVal;
+              }
+              return true; // All
+            });
+
+            if (filteredStaff.length === 0) {
+              return (
+                <div className="col-span-full text-center py-12 border border-slate-200 border-dashed rounded-xl bg-white dark:bg-[#111827] dark:border-slate-800">
+                  <p className="text-slate-400 text-xs">No staff accounts match the selected filter.</p>
+                </div>
+              );
+            }
+
+            return filteredStaff.map((user) => {
+              const isActiveVal = user.resource_fhir?.active !== false;
+
+              return (
+                <div
+                  key={user.id}
+                  className={`bg-white rounded-xl border shadow-sm dark:bg-[#111827] p-6 flex flex-col justify-between hover:border-slate-350 transition-colors ${
+                    !isActiveVal
+                      ? 'opacity-55 grayscale border-slate-200 bg-slate-50/50 dark:opacity-40 dark:border-slate-850'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div>
+                    {/* User Header Profile */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3.5">
+                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {user.full_name[0]}
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-900 dark:text-white">{user.full_name}</h4>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            <span className="text-[10px] bg-slate-50 border border-slate-150 rounded px-2 py-0.5 font-bold uppercase text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
+                              {user.position_role}
+                            </span>
+                            {!isActiveVal && (
+                              <span className="text-[10px] bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 font-bold text-slate-500 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-400">
+                                Inactive
+                              </span>
+                            )}
+                            {isActiveVal && currentUser?.position_role === 'Admin' && (() => {
+                              const status = authStatuses.find(s => s.id === user.id);
+                              if (!status || !status.exists) {
+                                  return (
+                                    <span className="text-[10px] bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 font-bold text-slate-500 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-400">
+                                      No Login Account
+                                    </span>
+                                  );
+                              }
+                              if (status.paused) {
+                                  return (
+                                    <span className="text-[10px] bg-red-50 border border-red-200 rounded px-1.5 py-0.5 font-bold text-red-600 dark:bg-red-950/20 dark:border-red-900/50 dark:text-red-400">
+                                      Paused Account
+                                    </span>
+                                  );
+                              }
+                              return (
+                                <span className="text-[10px] bg-emerald-50 border border-emerald-150 rounded px-1.5 py-0.5 font-bold text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900/50 dark:text-emerald-400">
+                                  Active Account
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {user.medical_council_registration_no && (
+                        <span className="text-[9px] font-mono text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded dark:border-slate-800" title="Medical Registration Number">
+                          {user.medical_council_registration_no}
                         </span>
-                        {currentUser?.position_role === 'Admin' && (() => {
+                      )}
+                    </div>
+
+                    <div className="mt-4 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                      <p>Email: <strong className="text-slate-700 dark:text-slate-300">{user.email}</strong></p>
+                      <p>Base Salary: <strong className="text-slate-700 dark:text-slate-300">₹{user.base_salary_monthly.toLocaleString('en-IN')}/mo</strong></p>
+                      <p>Session Bonus: <strong className="text-slate-700 dark:text-slate-300">{user.bonus_system_enabled ? 'Enabled' : 'Disabled'}</strong></p>
+                    </div>
+
+                    {canManageStaff && (
+                      <div className="space-y-1.5 mt-4">
+                        <button
+                          onClick={() => handleStartEdit(user)}
+                          className="w-full bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1"
+                        >
+                          <Edit2 className="h-3.5 w-3.5 text-brand-500" />
+                          <span>Edit Profile Details</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(user.id)}
+                          className={`w-full border rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 ${
+                            isActiveVal
+                              ? 'bg-slate-50 border-slate-200 text-slate-750 hover:bg-slate-100 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+                              : 'bg-emerald-50 border-emerald-250 text-emerald-755 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/60'
+                          }`}
+                        >
+                          <span>{isActiveVal ? '🚫 Mark Inactive' : '✅ Mark Active'}</span>
+                        </button>
+                        
+                        {isActiveVal && currentUser?.position_role === 'Admin' && (() => {
                           const status = authStatuses.find(s => s.id === user.id);
                           if (!status || !status.exists) {
                             return (
-                              <span className="text-[10px] bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 font-bold text-slate-500 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-400">
-                                No Login Account
-                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPromptPasswordUser(user);
+                                  setPromptPasswordText('');
+                                }}
+                                className="w-full bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-blue-950/20 dark:border-blue-900/40 dark:text-blue-400 dark:hover:bg-blue-900/60"
+                              >
+                                <span>🔑 Create Account</span>
+                              </button>
                             );
                           }
                           if (status.paused) {
                             return (
-                              <span className="text-[10px] bg-red-50 border border-red-200 rounded px-1.5 py-0.5 font-bold text-red-600 dark:bg-red-950/20 dark:border-red-900/50 dark:text-red-400">
-                                Paused Account
-                              </span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await dataService.pauseStaffAuthUser(user.id, false);
+                                    await dataService.addAuditTrail('CONSENT_CHANGED', `Resumed/reactivated login access for staff: ${user.full_name}`);
+                                    triggerRefresh();
+                                  } catch (err: any) {
+                                    alert(err?.message || "Failed to resume account.");
+                                  }
+                                }}
+                                className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400 dark:hover:bg-emerald-900/60"
+                              >
+                                <span>▶️ Resume Account</span>
+                              </button>
                             );
                           }
                           return (
-                            <span className="text-[10px] bg-emerald-50 border border-emerald-150 rounded px-1.5 py-0.5 font-bold text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900/50 dark:text-emerald-400">
-                              Active Account
-                            </span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await dataService.pauseStaffAuthUser(user.id, true);
+                                  await dataService.addAuditTrail('CONSENT_CHANGED', `Suspended/paused login access for staff: ${user.full_name}`);
+                                  triggerRefresh();
+                                } catch (err: any) {
+                                  alert(err?.message || "Failed to pause account.");
+                                }
+                              }}
+                              className="w-full bg-orange-50 hover:bg-orange-150 border border-orange-250 text-orange-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-orange-950/20 dark:border-orange-900/40 dark:text-orange-400 dark:hover:bg-orange-900/60"
+                            >
+                              <span>⏸️ Pause Account</span>
+                            </button>
                           );
                         })()}
+
+                        {currentUser?.position_role === 'Admin' && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStaff(user.id, user.full_name)}
+                            className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-750 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-red-950/20 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/60"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Delete Account</span>
+                          </button>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
-                  
-                  {user.medical_council_registration_no && (
-                    <span className="text-[9px] font-mono text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded dark:border-slate-800" title="Medical Registration Number">
-                      {user.medical_council_registration_no}
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-4 space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                  <p>Email: <strong className="text-slate-700 dark:text-slate-300">{user.email}</strong></p>
-                  <p>Base Salary: <strong className="text-slate-700 dark:text-slate-300">₹{user.base_salary_monthly.toLocaleString('en-IN')}/mo</strong></p>
-                  <p>Session Bonus: <strong className="text-slate-700 dark:text-slate-300">{user.bonus_system_enabled ? 'Enabled' : 'Disabled'}</strong></p>
-                </div>
-
-                {canManageStaff && (
-                  <div className="space-y-1.5">
-                    <button
-                      onClick={() => handleStartEdit(user)}
-                      className="mt-4 w-full bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1"
-                    >
-                      <Edit2 className="h-3.5 w-3.5 text-brand-500" />
-                      <span>Edit Profile Details</span>
-                    </button>
-                    
-                    {currentUser?.position_role === 'Admin' && (() => {
-                      const status = authStatuses.find(s => s.id === user.id);
-                      if (!status || !status.exists) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPromptPasswordUser(user);
-                              setPromptPasswordText('');
-                            }}
-                            className="w-full bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-blue-950/20 dark:border-blue-900/40 dark:text-blue-400 dark:hover:bg-blue-900/60"
-                          >
-                            <span>🔑 Create Account</span>
-                          </button>
-                        );
-                      }
-                      if (status.paused) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await dataService.pauseStaffAuthUser(user.id, false);
-                                await dataService.addAuditTrail('CONSENT_CHANGED', `Resumed/reactivated login access for staff: ${user.full_name}`);
-                                triggerRefresh();
-                              } catch (err: any) {
-                                alert(err?.message || "Failed to resume account.");
-                              }
-                            }}
-                            className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400 dark:hover:bg-emerald-900/60"
-                          >
-                            <span>▶️ Resume Account</span>
-                          </button>
-                        );
-                      }
-                      return (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              await dataService.pauseStaffAuthUser(user.id, true);
-                              await dataService.addAuditTrail('CONSENT_CHANGED', `Suspended/paused login access for staff: ${user.full_name}`);
-                              triggerRefresh();
-                            } catch (err: any) {
-                              alert(err?.message || "Failed to pause account.");
-                            }
-                          }}
-                          className="w-full bg-orange-50 hover:bg-orange-150 border border-orange-250 text-orange-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-orange-950/20 dark:border-orange-900/40 dark:text-orange-400 dark:hover:bg-orange-900/60"
-                        >
-                          <span>⏸️ Pause Account</span>
-                        </button>
-                      );
-                    })()}
-                  </div>
-                )}
 
                 {/* Security Flags Toggle Matrix */}
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
@@ -407,13 +537,12 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                         <span className={`${user.can_manage_staff ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
                       </button>
                     </div>
-
                   </div>
                 </div>
-
               </div>
-            </div>
-          ))
+              );
+            });
+          })()
         )}
       </div>
 

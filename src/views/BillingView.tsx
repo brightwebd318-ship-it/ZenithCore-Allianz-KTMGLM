@@ -604,7 +604,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                     
                     const receiptText = `
 --------------------------------------------------
-ZENITH CORE CLINICAL RECEIPT
+ZENITH CORE ALLIANCE RECEIPT
 --------------------------------------------------
 Invoice ID: ${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
 Date Generated: ${new Date(printableInvoice.created_at).toLocaleDateString('en-IN')}
@@ -625,7 +625,7 @@ SGST (9%): ₹${printableInvoice.sgst_rate > 0 ? printableInvoice.computed_tax_a
 Grand Total: ₹${printableInvoice.total_amount}
 Payment Status: ${String(printableInvoice.payment_status).toUpperCase()}
 --------------------------------------------------
-Thank you for choosing Zenith Ortho-Rehab Care!
+Thank you for choosing Zenith Core Alliance!
 `;
                     const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
@@ -652,14 +652,17 @@ Thank you for choosing Zenith Ortho-Rehab Care!
               <div className="space-y-6">
                 
                 {/* Header branding */}
-                <div className="flex justify-between items-start border-b border-slate-200 pb-4 dark:border-slate-800">
-                  <div>
-                    <h2 className="text-xl font-extrabold text-slate-900 dark:text-white font-outfit">
-                      {localStorage.getItem('zenith_tenant_logo_name') || 'Zenith Ortho-Rehab Care'}
-                    </h2>
-                    <p className="text-[10px] text-slate-450 uppercase tracking-widest font-bold">
-                      Zenith Medical Alliance Workspace
-                    </p>
+                <div className="flex justify-between items-center border-b border-slate-200 pb-4 dark:border-slate-800">
+                  <div className="flex items-center space-x-3">
+                    <img src="/logo.png" alt="Zenith Core Alliance" className="h-12 w-auto object-contain" />
+                    <div>
+                      <h2 className="text-xl font-extrabold text-slate-900 dark:text-white font-outfit">
+                        Zenith Core Alliance
+                      </h2>
+                      <p className="text-[10px] text-slate-450 uppercase tracking-widest font-bold">
+                        Zenith Medical Alliance Workspace
+                      </p>
+                    </div>
                   </div>
                   <div className="text-right">
                     <span className="text-xs font-mono font-bold bg-slate-100 text-slate-800 px-3 py-1.5 rounded dark:bg-slate-800 dark:text-slate-200">
@@ -779,7 +782,7 @@ Thank you for choosing Zenith Ortho-Rehab Care!
                 </div>
 
                 <div className="text-center text-[10px] text-slate-450 dark:text-slate-500 border-t border-slate-100 pt-4 dark:border-slate-800/60 font-medium">
-                  Thank you for choosing {localStorage.getItem('zenith_tenant_logo_name') || 'Zenith Ortho-Rehab Care'}!
+                  Thank you for choosing Zenith Core Alliance!
                 </div>
 
               </div>

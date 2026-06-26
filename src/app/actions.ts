@@ -535,7 +535,6 @@ export async function completeOnboardingAction(accessToken: string, tenantId: st
     .eq('id', tenantId);
   if (tErr) throw tErr;
 
-  // 2. Update the existing user's full name in public.users
   const { error: uErr } = await supabase
     .from('users')
     .update({
@@ -548,6 +547,37 @@ export async function completeOnboardingAction(accessToken: string, tenantId: st
     })
     .eq('id', userId);
   if (uErr) throw uErr;
+  return true;
+}
+
+export async function deleteStaffAction(accessToken: string, userId: string) {
+  // 1. Authorize: Verify the caller is an Admin
+  const userClient = createServerSupabaseClient(accessToken);
+  const { data: profile, error: profileErr } = await userClient
+    .from('users')
+    .select('position_role')
+    .eq('id', (await userClient.auth.getUser()).data.user?.id)
+    .single();
+  if (profileErr || !profile || profile.position_role !== 'Admin') {
+    throw new Error("Access Denied: Only Admin users can delete accounts.");
+  }
+
+  const adminClient = createAdminSupabaseClient();
+  
+  // Delete from auth.users if they exist
+  try {
+    await adminClient.auth.admin.deleteUser(userId);
+  } catch (err) {
+    console.warn("Failed to delete auth user, proceeding:", err);
+  }
+
+  // Delete from public.users
+  const { error: dbErr } = await adminClient
+    .from('users')
+    .delete()
+    .eq('id', userId);
+  if (dbErr) throw dbErr;
+
   return true;
 }
 

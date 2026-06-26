@@ -40,6 +40,7 @@ import {
   getTenantResourceMetricsAction,
   initializeTenantAction,
   completeOnboardingAction,
+  deleteStaffAction,
 } from '../app/actions';
 
 const getAuthToken = async (): Promise<string> => {
@@ -499,6 +500,51 @@ const initialExpenses: BusinessExpense[] = [
     category: 'Supplies',
     expense_date: '2026-06-05',
     attachment_size_bytes: 88000, // 0.08 MB
+  },
+  {
+    id: 'e3',
+    tenant_id: initialTenant.id,
+    expense_name: 'BESCOM Electricity Bill - May',
+    amount: 4200,
+    category: 'Utilities',
+    expense_date: '2026-06-02',
+    attachment_size_bytes: 45000,
+  },
+  {
+    id: 'e4',
+    tenant_id: initialTenant.id,
+    expense_name: 'Water & Cleaning Services',
+    amount: 1500,
+    category: 'Utilities',
+    expense_date: '2026-06-03',
+    attachment_size_bytes: 0,
+  },
+  {
+    id: 'e5',
+    tenant_id: initialTenant.id,
+    expense_name: 'Clinic Supplies - Resistance Loop Bands',
+    amount: 2400,
+    category: 'Supplies',
+    expense_date: '2026-06-06',
+    attachment_size_bytes: 12000,
+  },
+  {
+    id: 'e6',
+    tenant_id: initialTenant.id,
+    expense_name: 'Salary Payout - Dr. Ananya Sharma',
+    amount: 60000,
+    category: 'Salaries',
+    expense_date: '2026-06-01',
+    attachment_size_bytes: 150000,
+  },
+  {
+    id: 'e7',
+    tenant_id: initialTenant.id,
+    expense_name: 'Salary Payout - Rohan Mehta',
+    amount: 30000,
+    category: 'Salaries',
+    expense_date: '2026-06-01',
+    attachment_size_bytes: 150000,
   }
 ];
 
@@ -916,6 +962,22 @@ export const dataService = {
         { id: 'u2222222-2222-2222-2222-222222222222', exists: true, paused: false },
         { id: 'u3333333-3333-3333-3333-333333333333', exists: true, paused: false },
       ]);
+    }
+  },
+
+  deleteStaffUser: async (targetUserId: string): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      const token = await getAuthToken();
+      await deleteStaffAction(token, targetUserId);
+    } else {
+      // LocalStorage Mock Mode
+      const users = getStorageItem<User[]>('users', initialUsers);
+      const remainingUsers = users.filter((u) => u.id !== targetUserId);
+      setStorageItem('users', remainingUsers);
+
+      const mockStatuses = getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', []);
+      const remainingStatuses = mockStatuses.filter((s) => s.id !== targetUserId);
+      setStorageItem('mock_auth_statuses', remainingStatuses);
     }
   },
 
@@ -1549,7 +1611,7 @@ export const dataService = {
         return (data || []).map((session: any) => ({
           ...session,
           status: session.status || 'scheduled',
-          session_notes: session.session_notes || 'Therapy and spinal alignment routines.'
+          session_notes: session.session_notes || ''
         }));
       } catch (err) {
         console.warn("Error fetching scheduled sessions from Supabase, falling back to LocalStorage:", err);
@@ -1610,13 +1672,11 @@ export const dataService = {
     let createdSession: ScheduledSession;
     if (isSupabaseConfigured && supabase) {
       try {
-        // Omit session_notes since it does not exist in the remote scheduled_sessions database table
-        const { session_notes, ...dbPayload } = newSession;
         const token = await getAuthToken();
-        const data = await addScheduledSessionAction(token, dbPayload);
+        const data = await addScheduledSessionAction(token, newSession);
         createdSession = {
           ...data,
-          session_notes: session_notes || 'Therapy and spinal alignment routines.'
+          session_notes: data.session_notes || ''
         };
       } catch (err) {
         console.warn("Error inserting scheduled session to Supabase, falling back to LocalStorage:", err);
@@ -1664,7 +1724,7 @@ export const dataService = {
       const data = await updateScheduledSessionStatusAction(token, sessionId, status);
       return {
         ...data,
-        session_notes: data.session_notes || 'Therapy and spinal alignment routines.'
+        session_notes: data.session_notes || ''
       };
     } else {
       const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);

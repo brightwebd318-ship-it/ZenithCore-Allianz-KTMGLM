@@ -44,7 +44,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   const [staffId, setStaffId] = useState('');
   const [sessionDate, setSessionDate] = useState(getTodayDateString());
   const [startTime, setStartTime] = useState(getCurrentTimeString(0));
-  const [endTime, setEndTime] = useState(getCurrentTimeString(60));
+  const [numSessions, setNumSessions] = useState<number>(1);
   const [notes, setNotes] = useState('');
 
   // Toast / Status message
@@ -108,8 +108,11 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     setBookingError(null);
 
     try {
-      const startIso = `${sessionDate}T${startTime}:00`;
-      const endIso = `${sessionDate}T${endTime}:00`;
+      // Calculate local Date objects to prevent timezone shifting
+      const localStart = new Date(`${sessionDate}T${startTime}:00`);
+      const localEnd = new Date(localStart.getTime() + numSessions * 45 * 60 * 1000);
+      const startIso = localStart.toISOString();
+      const endIso = localEnd.toISOString();
 
       await dataService.addScheduledSession({
         patient_id: patientId,
@@ -121,6 +124,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
 
       // Clear note
       setNotes('');
+      setNumSessions(1);
       await dataService.addAuditTrail('READ_PATIENT', `Booked new therapy session for patient ID ${patientId}`);
       triggerRefresh();
     } catch (err: any) {
@@ -172,7 +176,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
         {/* Left column: Booking form */}
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
           <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-            <CalendarIcon className="h-4 w-4 mr-2 text-brand-500" /> Allocate Shift Session
+            <CalendarIcon className="h-4 w-4 mr-2 text-brand-500" /> Allocate Session
           </h3>
 
           <form onSubmit={handleBookSession} className="space-y-4">
@@ -235,12 +239,13 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">End Time</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sessions (45m each)</label>
                 <input
-                  type="time"
+                  type="number"
+                  min="1"
                   required
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
+                  value={numSessions}
+                  onChange={(e) => setNumSessions(parseInt(e.target.value) || 1)}
                   className="w-full rounded border border-slate-200 px-2 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                 />
               </div>
@@ -270,7 +275,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-              <Clock className="h-4 w-4 mr-2 text-teal-500" /> Shift Timetable Matrix
+              <Clock className="h-4 w-4 mr-2 text-teal-500" /> Planned sessions
             </h3>
             <span className="text-[10px] bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded font-bold text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400">
               Live Feed
