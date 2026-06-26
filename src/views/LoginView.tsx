@@ -53,6 +53,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenOnbo
         const isDefaultDev = email.trim().toLowerCase() === defaultAdmin.email && password === defaultAdmin.password;
 
         if (matchedUser || isDefaultDev) {
+          // Check if account is suspended/paused in mock mode
+          let matchedUserId: string | null = null;
+          if (isDefaultDev) {
+            matchedUserId = 'u1111111-1111-1111-1111-111111111111';
+          } else if (matchedUser) {
+            matchedUserId = matchedUser.id;
+          }
+
+          if (matchedUserId) {
+            const mockStatusesData = localStorage.getItem('zenith_mock_auth_statuses');
+            const mockStatuses = mockStatusesData ? JSON.parse(mockStatusesData) : [];
+            const status = mockStatuses.find((s: any) => s.id === matchedUserId);
+            if (status && status.paused) {
+              throw new Error('This account has been paused/suspended by an administrator.');
+            }
+          }
+
           // Write a simulated session active token
           localStorage.setItem('zenith_session', JSON.stringify({
             email: email.trim().toLowerCase(),

@@ -197,7 +197,7 @@ export const Layout: React.FC<LayoutProps> = ({
     { name: 'Inventory' as TabType, icon: Package },
     { name: 'Staff' as TabType, icon: UserCheck },
     { name: 'Reports' as TabType, icon: BarChart3 },
-    { name: 'Administrative Controls' as TabType, icon: Sliders },
+    ...(currentUser?.position_role === 'Admin' ? [{ name: 'Administrative Controls' as TabType, icon: Sliders }] : []),
   ];
 
   return (

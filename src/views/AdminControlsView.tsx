@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Download,
   Upload,
   AlertTriangle,
   Database,
   CloudLightning,
-  CheckCircle
+  CheckCircle,
+  ShieldAlert,
+  Search,
+  Clock,
+  Users
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
+import type { SystemAuditTrail, User as StaffUser } from '../services/dataService';
 
 interface AdminControlsViewProps {
   triggerRefresh: () => void;
@@ -20,6 +25,44 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
   // High-risk confirmation states
   const [confirmTruncate, setConfirmTruncate] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+
+  // Forensic Audit Trail States
+  const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
+  const [auditTrails, setAuditTrails] = useState<SystemAuditTrail[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [filterAction, setFilterAction] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const loadAdminData = async () => {
+    setLoadingLogs(true);
+    try {
+      const userProfile = await dataService.getCurrentUser();
+      setCurrentUser(userProfile);
+      
+      const trails = await dataService.getAuditTrails();
+      setAuditTrails(trails);
+    } catch (err) {
+      console.error('Failed to load admin logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAdminData();
+  }, []);
+
+  if (currentUser && currentUser.position_role !== 'Admin') {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-red-200 rounded-xl dark:bg-[#111827] dark:border-red-950/20 max-w-xl mx-auto mt-12 shadow-lg">
+        <AlertTriangle className="h-12 w-12 text-red-500 mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Access Denied</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-450 mt-2 max-w-md">
+          This panel is restricted to system administrators with full security clearance. All unauthorized access attempts are forensically logged.
+        </p>
+      </div>
+    );
+  }
 
   const triggerDownload = (content: string, filename: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
@@ -88,6 +131,7 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
       await dataService.addAuditTrail('FINANCIAL_MUTATION', 'Generated full SQL system backup file');
       setSuccessMsg('Unified system SQL backup payload compiled and downloaded successfully!');
       triggerRefresh();
+      loadAdminData();
     } catch (err) {
       console.error(err);
     } finally {
@@ -102,6 +146,7 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
       setConfirmTruncate(false);
       setSuccessMsg('Forensic System Audit Trails purged successfully.');
       triggerRefresh();
+      loadAdminData();
     } catch (err) {
       console.error(err);
     }
@@ -112,13 +157,14 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
       await dataService.wipeCompletedTasks();
       setSuccessMsg('Completed tasks and temporary log caches purged.');
       triggerRefresh();
+      loadAdminData();
     } catch (err) {
       console.error(err);
     }
   };
 
   // 3. AWS MIGRATION READY EXPORT ENGINE
-  const handleExportAWSDDL = () => {
+  const handleExportAWSDDL = async () => {
     const ddl = `-- AWS RDS-Compatible ANSI SQL Schema
 -- Optimized for AWS Aurora PostgreSQL-15 / RDS PostgreSQL
 -- Removes Supabase specific wrappers, relying on pure ANSI syntax
@@ -251,8 +297,9 @@ CREATE TABLE scheduled_sessions (
 `;
 
     triggerDownload(ddl, 'aws_rds_postgres_schema.sql', 'text/sql');
-    dataService.addAuditTrail('FINANCIAL_MUTATION', 'Exported AWS RDS DDL Schema files');
+    await dataService.addAuditTrail('FINANCIAL_MUTATION', 'Exported AWS RDS DDL Schema files');
     setSuccessMsg('AWS RDS DDL schema downloaded. Ready for migration scaling.');
+    loadAdminData();
   };
 
   const handleExportCSV = async (tableName: 'users' | 'patients' | 'invoices' | 'inventory') => {
@@ -291,6 +338,7 @@ CREATE TABLE scheduled_sessions (
       triggerDownload(csvRows.join('\n'), `${tableName}_export.csv`, 'text/csv');
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Exported table '${tableName}' to CSV format`);
       setSuccessMsg(`Table '${tableName}' exported successfully as CSV.`);
+      loadAdminData();
     } catch (err) {
       console.error(err);
     }
@@ -318,6 +366,7 @@ CREATE TABLE scheduled_sessions (
         setSuccessMsg(`Database state recovered successfully from backup file: ${file.name}`);
         await dataService.addAuditTrail('FINANCIAL_MUTATION', `Restored database state from backup file: ${file.name}`);
         triggerRefresh();
+        loadAdminData();
       }, 1500);
     } else {
       alert('Invalid file format. Please drop a .sql or .json backup file.');
@@ -503,6 +552,137 @@ CREATE TABLE scheduled_sessions (
 
         </div>
 
+      </div>
+
+      {/* 4. Forensic Audit Trail Lookup Section (Full Width at Bottom) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800 space-y-3 sm:space-y-0">
+          <div className="flex items-center space-x-2">
+            <ShieldAlert className="h-5 w-5 text-red-500 animate-pulse" />
+            <div>
+              <h3 className="font-bold text-slate-900 dark:text-white">Forensic System Audit Trail</h3>
+              <p className="text-xs text-slate-450 dark:text-slate-500 font-medium">Compliance verification and digital access logs</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
+            {/* Search Input */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-3.5 w-3.5 text-slate-400" />
+              </span>
+              <input
+                type="text"
+                placeholder="Search description/performer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500 w-full sm:w-56"
+              />
+            </div>
+
+            {/* Action Type Filter Dropdown */}
+            <select
+              value={filterAction}
+              onChange={(e) => setFilterAction(e.target.value)}
+              className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500"
+            >
+              <option value="ALL">All Actions</option>
+              <option value="SEARCH">SEARCH</option>
+              <option value="READ_PATIENT">READ_PATIENT</option>
+              <option value="FINANCIAL_MUTATION">FINANCIAL_MUTATION</option>
+              <option value="CONSENT_CHANGED">CONSENT_CHANGED</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Audit Trails Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-[10px] font-bold text-slate-450 uppercase tracking-wider border-b border-slate-200 dark:bg-slate-855 dark:border-slate-800 font-mono">
+                <th className="px-4 py-3">Timestamp (IST)</th>
+                <th className="px-4 py-3">Action Type</th>
+                <th className="px-4 py-3">Details / Digital Trail Description</th>
+                <th className="px-4 py-3">Performed By</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700 dark:divide-slate-800 dark:text-slate-300">
+              {loadingLogs ? (
+                <tr>
+                  <td colSpan={4} className="text-center py-8 text-slate-450 font-medium">Loading forensic logs...</td>
+                </tr>
+              ) : (
+                (() => {
+                  const filteredTrails = auditTrails.filter((trail) => {
+                    const matchesAction = filterAction === 'ALL' || trail.action_type === filterAction;
+                    const matchesSearch =
+                      trail.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      trail.performed_by.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      trail.action_type.toLowerCase().includes(searchQuery.toLowerCase());
+                    return matchesAction && matchesSearch;
+                  });
+
+                  if (filteredTrails.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={4} className="text-center py-8 text-slate-450 font-medium">No matching audit logs found.</td>
+                      </tr>
+                    );
+                  }
+
+                  return filteredTrails.map((trail) => {
+                    let badgeClass = '';
+                    switch (trail.action_type) {
+                      case 'SEARCH':
+                        badgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/20 dark:text-blue-400';
+                        break;
+                      case 'READ_PATIENT':
+                        badgeClass = 'bg-purple-100 text-purple-800 dark:bg-purple-950/20 dark:text-purple-400';
+                        break;
+                      case 'FINANCIAL_MUTATION':
+                        badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400';
+                        break;
+                      case 'CONSENT_CHANGED':
+                        badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/20 dark:text-amber-400';
+                        break;
+                      default:
+                        badgeClass = 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400';
+                    }
+
+                    const formattedTime = new Date(trail.created_at).toLocaleString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: true
+                    });
+
+                    return (
+                      <tr key={trail.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="px-4 py-3.5 font-mono text-slate-500 dark:text-slate-450 font-medium text-[11px] whitespace-nowrap">
+                          {formattedTime}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase font-mono tracking-wider ${badgeClass}`}>
+                            {trail.action_type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
+                          {trail.description}
+                        </td>
+                        <td className="px-4 py-3.5 font-semibold text-slate-900 dark:text-white font-mono text-[11px]">
+                          {trail.performed_by}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
     </div>

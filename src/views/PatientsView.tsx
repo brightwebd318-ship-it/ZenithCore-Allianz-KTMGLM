@@ -196,6 +196,12 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
     }
   };
 
+  const handleViewInvoicePDF = async (invoice: Invoice) => {
+    setPrintableInvoice(invoice);
+    const patientName = selectedPatient ? `${selectedPatient.resource_fhir?.name?.[0]?.given?.[0]} ${selectedPatient.resource_fhir?.name?.[0]?.family}` : 'Unknown';
+    await dataService.addAuditTrail('READ_PATIENT', `Viewed/Printed Invoice PDF (ID: ${invoice.resource_fhir?.identifier?.[0]?.value || invoice.id}) for Patient: ${patientName} (ID: ${invoice.patient_id})`);
+  };
+
   // Add Patient Form Submit
   const handleAddPatient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -698,7 +704,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                             </div>
                             
                             <button
-                              onClick={() => setPrintableInvoice(invoice)}
+                              onClick={() => handleViewInvoicePDF(invoice)}
                               className="bg-brand-50 hover:bg-brand-100 text-brand-600 text-xs font-bold px-3 py-1.5 rounded-lg border border-brand-100 dark:bg-brand-950/20 dark:text-brand-400 dark:border-brand-900/30 transition-all shadow-xs inline-flex items-center space-x-1"
                               title="View PDF / Print Invoice"
                             >

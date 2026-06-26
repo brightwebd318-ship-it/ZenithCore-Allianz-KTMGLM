@@ -1,4 +1,54 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import {
+  getTenantAction,
+  updateTenantAction,
+  getUsersAction,
+  getCurrentUserAction,
+  updateUserPermissionsAction,
+  addUserAction,
+  createStaffAuthAction,
+  pauseStaffAuthAction,
+  getAuthUsersStatusAction,
+  getPatientsAction,
+  addPatientAction,
+  updatePatientConsentAction,
+  updatePatientGstAction,
+  getClinicalLogsAction,
+  addClinicalLogAction,
+  softDeleteClinicalLogAction,
+  getInvoicesAction,
+  addInvoiceAction,
+  updateInvoicePaymentStatusAction,
+  getInventoryAction,
+  addInventoryItemAction,
+  updateInventoryStockAction,
+  getExpensesAction,
+  addExpenseAction,
+  getAuditTrailsAction,
+  addAuditTrailAction,
+  truncateAuditTrailsAction,
+  getTodoTasksAction,
+  addTodoTaskAction,
+  updateTodoTaskStatusAction,
+  getScheduledSessionsAction,
+  addScheduledSessionAction,
+  updateScheduledSessionStatusAction,
+  getSystemNotificationsAction,
+  markNotificationAsReadAction,
+  deleteScheduledSessionAction,
+  wipeCompletedTasksAction,
+  getTenantResourceMetricsAction,
+  initializeTenantAction,
+  completeOnboardingAction,
+} from '../app/actions';
+
+const getAuthToken = async (): Promise<string> => {
+  if (isSupabaseConfigured && supabase) {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token || '';
+  }
+  return '';
+};
 
 // Helper to generate UUIDs in mockup mode
 export const generateUUID = () => {
@@ -592,27 +642,8 @@ export const dataService = {
   // TENANTS
   getTenant: async (): Promise<Tenant> => {
     if (isSupabaseConfigured && supabase) {
-      // 1. Get current logged in user from Auth
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No active auth session found");
-
-      // 2. Get their user profile to find their tenant_id
-      const { data: profile, error: profileErr } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single();
-      if (profileErr) throw profileErr;
-      if (!profile) throw new Error("No user profile found matching the active session");
-
-      // 3. Get the tenant using the tenant_id
-      const { data: tenant, error: tenantErr } = await supabase
-        .from('tenants')
-        .select('*')
-        .eq('id', profile.tenant_id)
-        .single();
-      if (tenantErr) throw tenantErr;
-      return tenant;
+      const token = await getAuthToken();
+      return getTenantAction(token);
     } else {
       return getStorageItem('tenant', initialTenant);
     }
@@ -620,16 +651,8 @@ export const dataService = {
 
   updateTenant: async (tenant: Partial<Tenant>): Promise<Tenant> => {
     if (isSupabaseConfigured && supabase) {
-      // tenant_id will be handled by RLS/session, but updating tenant usually matches id
-      const current = await dataService.getTenant();
-      const { data, error } = await supabase
-        .from('tenants')
-        .update(tenant)
-        .eq('id', current.id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return updateTenantAction(token, tenant);
     } else {
       const current = getStorageItem('tenant', initialTenant);
       const updated = { ...current, ...tenant };
@@ -642,11 +665,8 @@ export const dataService = {
   getUsers: async (): Promise<User[]> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('users').select('*');
-        if (error) {
-          console.warn("Failed to fetch users from Supabase:", error);
-          return [];
-        }
+        const token = await getAuthToken();
+        const data = await getUsersAction(token);
         return (data || []).map((row: any) => ({
           ...row,
           can_manage_staff: row.resource_fhir?.can_manage_staff !== undefined
@@ -670,17 +690,9 @@ export const dataService = {
 
   getCurrentUser: async (): Promise<User | null> => {
     if (isSupabaseConfigured && supabase) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      if (error) {
-        console.error("Error fetching current user from public.users:", error);
-        return null;
-      }
+      const token = await getAuthToken();
+      const data = await getCurrentUserAction(token);
+      if (!data) return null;
       return {
         ...data,
         can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
@@ -714,8 +726,9 @@ export const dataService = {
   updateUserPermissions: async (userId: string, updates: Partial<User>): Promise<User> => {
     let current: any;
     if (isSupabaseConfigured && supabase) {
-      const { data } = await supabase.from('users').select('*').eq('id', userId).single();
-      current = data;
+      const token = await getAuthToken();
+      const users = await getUsersAction(token);
+      current = users.find((u: any) => u.id === userId);
     } else {
       const users = getStorageItem('users', initialUsers);
       current = users.find((u) => u.id === userId);
@@ -736,13 +749,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('users')
-        .update(dbPayload)
-        .eq('id', userId)
-        .select()
-        .single();
-      if (error) throw error;
+      const token = await getAuthToken();
+      const data = await updateUserPermissionsAction(token, userId, dbPayload);
       return {
         ...data,
         can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
@@ -783,8 +791,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('users').insert([newUser]).select().single();
-      if (error) throw error;
+      const token = await getAuthToken();
+      const data = await addUserAction(token, newUser);
       return {
         ...data,
         can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
@@ -804,19 +812,118 @@ export const dataService = {
     }
   },
 
+  createStaffAuthUser: async (
+    email: string,
+    password?: string,
+    fullName?: string,
+    role?: 'Admin' | 'Senior Therapist' | 'Receptionist',
+    targetUserId?: string
+  ): Promise<string> => {
+    if (isSupabaseConfigured && supabase) {
+      const tenant = await dataService.getTenant();
+      const token = await getAuthToken();
+      return createStaffAuthAction(token, email, password, fullName, role, tenant.id, targetUserId);
+    } else {
+      // LocalStorage Mock Mode
+      const tenant = getStorageItem('tenant', initialTenant);
+      const newUserId = targetUserId || generateUUID();
+      
+      // Seed mockup auth session / logins in localstorage if needed
+      const mockLogins = getStorageItem<{ [email: string]: string }>('mock_auth_passwords', {
+        'dibin@zenithcore.com': 'password',
+        'ananya@zenithcore.com': 'password',
+        'rohan@zenithcore.com': 'password',
+      });
+      mockLogins[email.toLowerCase()] = password || 'password';
+      setStorageItem('mock_auth_passwords', mockLogins);
+      
+      const mockStatuses = getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', [
+        { id: 'u1111111-1111-1111-1111-111111111111', exists: true, paused: false },
+        { id: 'u2222222-2222-2222-2222-222222222222', exists: true, paused: false },
+        { id: 'u3333333-3333-3333-3333-333333333333', exists: true, paused: false },
+      ]);
+      
+      const existingIdx = mockStatuses.findIndex(s => s.id === newUserId);
+      if (existingIdx !== -1) {
+        mockStatuses[existingIdx] = { id: newUserId, exists: true, paused: false };
+      } else {
+        mockStatuses.push({ id: newUserId, exists: true, paused: false });
+      }
+      setStorageItem('mock_auth_statuses', mockStatuses);
+
+      // If this is a new user (no targetUserId), add to public.users mock list as well
+      if (!targetUserId) {
+        const users = getStorageItem('users', initialUsers);
+        const resourceFhir = {
+          resourceType: 'Practitioner',
+          active: true,
+          name: [{ text: fullName || email.split('@')[0] }],
+          can_manage_staff: role === 'Admin'
+        };
+        const newUser: User = {
+          id: newUserId,
+          tenant_id: tenant.id,
+          email,
+          full_name: fullName || email.split('@')[0],
+          position_role: role || 'Receptionist',
+          medical_council_registration_no: '',
+          can_view_personal_data: true,
+          can_view_medical_history: role !== 'Receptionist',
+          can_manage_finance: role === 'Admin',
+          can_print_generate_invoice: true,
+          can_manage_staff: role === 'Admin',
+          base_salary_monthly: 0,
+          bonus_system_enabled: false,
+          resource_fhir: resourceFhir
+        };
+        users.push(newUser);
+        setStorageItem('users', users);
+      }
+      
+      return newUserId;
+    }
+  },
+
+  pauseStaffAuthUser: async (targetUserId: string, shouldPause: boolean): Promise<void> => {
+    if (isSupabaseConfigured && supabase) {
+      const token = await getAuthToken();
+      await pauseStaffAuthAction(token, targetUserId, shouldPause);
+    } else {
+      // LocalStorage Mock Mode
+      const mockStatuses = getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', [
+        { id: 'u1111111-1111-1111-1111-111111111111', exists: true, paused: false },
+        { id: 'u2222222-2222-2222-2222-222222222222', exists: true, paused: false },
+        { id: 'u3333333-3333-3333-3333-333333333333', exists: true, paused: false },
+      ]);
+      const idx = mockStatuses.findIndex(s => s.id === targetUserId);
+      if (idx !== -1) {
+        mockStatuses[idx].paused = shouldPause;
+      } else {
+        mockStatuses.push({ id: targetUserId, exists: true, paused: shouldPause });
+      }
+      setStorageItem('mock_auth_statuses', mockStatuses);
+    }
+  },
+
+  getAuthUsersStatus: async (): Promise<Array<{ id: string; exists: boolean; paused: boolean }>> => {
+    if (isSupabaseConfigured && supabase) {
+      const token = await getAuthToken();
+      return getAuthUsersStatusAction(token);
+    } else {
+      // LocalStorage Mock Mode
+      return getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', [
+        { id: 'u1111111-1111-1111-1111-111111111111', exists: true, paused: false },
+        { id: 'u2222222-2222-2222-2222-222222222222', exists: true, paused: false },
+        { id: 'u3333333-3333-3333-3333-333333333333', exists: true, paused: false },
+      ]);
+    }
+  },
+
   // PATIENTS
   getPatients: async (searchQuery?: string): Promise<Patient[]> => {
     if (isSupabaseConfigured && supabase) {
-      let query = supabase.from('patients').select('*');
-      // If filtering by search query
-      if (searchQuery) {
-        query = query.or(
-          `resource_fhir->name->0->given->>0.ilike.%${searchQuery}%,resource_fhir->name->0->>family.ilike.%${searchQuery}%,abha_number.ilike.%${searchQuery}%,abha_address.ilike.%${searchQuery}%`
-        );
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return getPatientsAction(token, searchQuery);
     } else {
       const patients = getStorageItem('patients', initialPatients);
       if (!searchQuery) return patients;
@@ -846,9 +953,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('patients').insert([newPatient]).select().single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return addPatientAction(token, newPatient);
     } else {
       const patients = getStorageItem('patients', initialPatients);
       patients.push(newPatient);
@@ -869,14 +975,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('patients')
-        .update(updates)
-        .eq('id', patientId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return updatePatientConsentAction(token, patientId, updates);
     } else {
       const patients = getStorageItem('patients', initialPatients);
       const idx = patients.findIndex((p) => p.id === patientId);
@@ -892,14 +992,8 @@ export const dataService = {
   updatePatientGst: async (patientId: string, gstEnabled: boolean, gstin: string | null): Promise<Patient> => {
     const updates = { gst_enabled: gstEnabled, gstin };
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('patients')
-        .update(updates)
-        .eq('id', patientId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return updatePatientGstAction(token, patientId, updates);
     } else {
       const patients = getStorageItem('patients', initialPatients);
       const idx = patients.findIndex((p) => p.id === patientId);
@@ -915,13 +1009,8 @@ export const dataService = {
   // CLINICAL LOGS
   getClinicalLogs: async (patientId: string): Promise<ClinicalLog[]> => {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('clinical_logs')
-        .select('*')
-        .eq('patient_id', patientId)
-        .eq('is_deleted', false); // soft-delete filtering
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return getClinicalLogsAction(token, patientId);
     } else {
       const logs = getStorageItem('clinical_logs', initialClinicalLogs);
       return logs.filter((log) => log.patient_id === patientId && !log.is_deleted);
@@ -954,9 +1043,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('clinical_logs').insert([newLog]).select().single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return addClinicalLogAction(token, newLog);
     } else {
       const logs = getStorageItem('clinical_logs', initialClinicalLogs);
       logs.push(newLog);
@@ -967,11 +1055,8 @@ export const dataService = {
 
   softDeleteClinicalLog: async (logId: string): Promise<void> => {
     if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase
-        .from('clinical_logs')
-        .update({ is_deleted: true })
-        .eq('id', logId);
-      if (error) throw error;
+      const token = await getAuthToken();
+      await softDeleteClinicalLogAction(token, logId);
     } else {
       const logs = getStorageItem('clinical_logs', initialClinicalLogs);
       const idx = logs.findIndex((l) => l.id === logId);
@@ -985,9 +1070,8 @@ export const dataService = {
   // INVOICES
   getInvoices: async (): Promise<Invoice[]> => {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return getInvoicesAction(token);
     } else {
       return getStorageItem('invoices', initialInvoices);
     }
@@ -1017,10 +1101,9 @@ export const dataService = {
     // Get current total count of invoices dynamically to base invoice serial sequence
     let currentInvoicesCount = 0;
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('invoices').select('id');
-      if (!error && data) {
-        currentInvoicesCount = data.length;
-      }
+      const token = await getAuthToken();
+      const dbInvoices = await getInvoicesAction(token);
+      currentInvoicesCount = dbInvoices.length;
     } else {
       currentInvoicesCount = getStorageItem('invoices', initialInvoices).length;
     }
@@ -1078,9 +1161,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('invoices').insert([newInvoice]).select().single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return addInvoiceAction(token, newInvoice);
     } else {
       const invoices = getStorageItem('invoices', initialInvoices);
       invoices.push(newInvoice);
@@ -1091,14 +1173,8 @@ export const dataService = {
 
   updateInvoiceStatus: async (invoiceId: string, status: Invoice['payment_status']): Promise<Invoice> => {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('invoices')
-        .update({ payment_status: status.toLowerCase() })
-        .eq('id', invoiceId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return updateInvoicePaymentStatusAction(token, invoiceId, status.toLowerCase());
     } else {
       const invoices = getStorageItem('invoices', initialInvoices);
       const idx = invoices.findIndex((inv) => inv.id === invoiceId);
@@ -1114,9 +1190,8 @@ export const dataService = {
   // INVENTORY
   getInventory: async (): Promise<InventoryItem[]> => {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('inventory_items').select('*');
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return getInventoryAction(token);
     } else {
       return getStorageItem('inventory', initialInventory);
     }
@@ -1124,14 +1199,8 @@ export const dataService = {
 
   updateInventoryStock: async (itemId: string, count: number): Promise<InventoryItem> => {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .update({ stock_count: count })
-        .eq('id', itemId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return updateInventoryStockAction(token, itemId, count);
     } else {
       const items = getStorageItem('inventory', initialInventory);
       const idx = items.findIndex((i) => i.id === itemId);
@@ -1153,9 +1222,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase.from('inventory_items').insert([newItem]).select().single();
-      if (error) throw error;
-      return data;
+      const token = await getAuthToken();
+      return addInventoryItemAction(token, newItem);
     } else {
       const items = getStorageItem('inventory', initialInventory);
       items.push(newItem);
@@ -1168,11 +1236,8 @@ export const dataService = {
   getExpenses: async (): Promise<BusinessExpense[]> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('business_expenses').select('*');
-        if (error) {
-          console.warn("Failed to fetch expenses from Supabase, falling back to LocalStorage:", error);
-          return getStorageItem('expenses', initialExpenses);
-        }
+        const token = await getAuthToken();
+        const data = await getExpensesAction(token);
         return (data || []).map((row: any) => ({
           id: row.id,
           tenant_id: row.tenant_id,
@@ -1203,10 +1268,11 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
+      const token = await getAuthToken();
       let userId: string | null = null;
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        userId = user?.id || null;
+        const currentUser = await dataService.getCurrentUser();
+        userId = currentUser?.id || null;
       } catch (authErr) {
         console.warn("Failed to retrieve auth user inside addExpense:", authErr);
       }
@@ -1218,18 +1284,7 @@ export const dataService = {
       };
 
       try {
-        const { data, error } = await supabase.from('business_expenses').insert([dbPayload]).select().single();
-        if (error) {
-          console.warn("Failed to insert expense to Supabase, falling back to LocalStorage:", error);
-          const mockExpense: BusinessExpense = {
-            ...newExpense,
-            expense_name: expense.expense_name,
-          };
-          const expenses = getStorageItem('expenses', initialExpenses);
-          expenses.push(mockExpense);
-          setStorageItem('expenses', expenses);
-          return mockExpense;
-        }
+        const data = await addExpenseAction(token, dbPayload);
         return {
           id: data.id,
           tenant_id: data.tenant_id,
@@ -1266,15 +1321,16 @@ export const dataService = {
   getAuditTrails: async (): Promise<SystemAuditTrail[]> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('system_audit_trails')
-          .select('*')
-          .order('created_at', { ascending: false });
-        if (error) {
-          console.warn("Failed to fetch audit trails from Supabase, falling back to LocalStorage:", error);
-          return getStorageItem('audit_trails', initialAuditTrails);
-        }
-        return data || [];
+        const token = await getAuthToken();
+        const data = await getAuditTrailsAction(token);
+        return (data || []).map((row: any) => ({
+          id: row.id,
+          tenant_id: row.tenant_id,
+          action_type: row.action_type,
+          description: row.metadata?.description || row.resource_affected || 'No description provided',
+          performed_by: row.performer?.full_name || row.performer?.email || 'System / Unknown',
+          created_at: row.timestamp || new Date().toISOString()
+        }));
       } catch (err) {
         console.warn("Error in getAuditTrails, falling back to LocalStorage:", err);
         return getStorageItem('audit_trails', initialAuditTrails);
@@ -1286,18 +1342,45 @@ export const dataService = {
 
   addAuditTrail: async (actionType: SystemAuditTrail['action_type'], description: string): Promise<void> => {
     const tenant = await dataService.getTenant();
-    const newTrail: SystemAuditTrail = {
-      id: generateUUID(),
-      tenant_id: tenant.id,
-      action_type: actionType,
-      description,
-      performed_by: 'Dibin', // Currently simulated session user
-      created_at: new Date().toISOString(),
-    };
+    
+    // Attempt to get logged-in user profile
+    let currentUserId: string | null = null;
+    let currentUserEmail = 'System / Unknown';
+    try {
+      const currentUser = await dataService.getCurrentUser();
+      if (currentUser) {
+        currentUserId = currentUser.id;
+        currentUserEmail = currentUser.full_name || currentUser.email || 'Unknown User';
+      }
+    } catch (e) {
+      console.warn("Failed to load current user for audit trail:", e);
+    }
 
     if (isSupabaseConfigured && supabase) {
-      await supabase.from('system_audit_trails').insert([newTrail]);
+      const dbRow = {
+        id: generateUUID(),
+        tenant_id: tenant.id,
+        performer_id: currentUserId,
+        action_type: actionType,
+        resource_affected: description.substring(0, 100) || 'System',
+        metadata: { description },
+      };
+      
+      try {
+        const token = await getAuthToken();
+        await addAuditTrailAction(token, dbRow);
+      } catch (err: any) {
+        console.error("Failed to insert audit trail into Supabase system_audit_trails. Error message: " + err.message);
+      }
     } else {
+      const newTrail: SystemAuditTrail = {
+        id: generateUUID(),
+        tenant_id: tenant.id,
+        action_type: actionType,
+        description,
+        performed_by: currentUserEmail,
+        created_at: new Date().toISOString(),
+      };
       const trails = getStorageItem('audit_trails', initialAuditTrails);
       trails.unshift(newTrail);
       setStorageItem('audit_trails', trails);
@@ -1306,8 +1389,8 @@ export const dataService = {
 
   truncateAuditTrails: async (): Promise<void> => {
     if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.from('system_audit_trails').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (error) throw error;
+      const token = await getAuthToken();
+      await truncateAuditTrailsAction(token);
     } else {
       setStorageItem('audit_trails', []);
     }
@@ -1318,11 +1401,8 @@ export const dataService = {
   getTodoTasks: async (): Promise<TodoTask[]> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('todo_tasks').select('*');
-        if (error) {
-          console.warn("Failed to fetch todo tasks from Supabase, falling back to LocalStorage:", error);
-          return getStorageItem('todo_tasks', initialTodoTasks);
-        }
+        const token = await getAuthToken();
+        const data = await getTodoTasksAction(token);
         return (data || []).map(mapTodoTaskFromDb);
       } catch (err) {
         console.warn("Error in getTodoTasks, falling back to LocalStorage:", err);
@@ -1354,17 +1434,9 @@ export const dataService = {
           creator_id: newTask.created_by,
           task_body: newTask.title + (newTask.description ? ' | ' + newTask.description : ''),
         };
-        const { data, error } = await supabase.from('todo_tasks').insert([dbPayload]).select().single();
-        if (error) {
-          console.warn("Failed to insert task to Supabase, falling back to LocalStorage:", error);
-          const tasks = getStorageItem('todo_tasks', initialTodoTasks);
-          tasks.push(newTask);
-          setStorageItem('todo_tasks', tasks);
-          notifySubscribers('todo_tasks', 'INSERT', newTask);
-          createdTask = newTask;
-        } else {
-          createdTask = mapTodoTaskFromDb(data);
-        }
+        const token = await getAuthToken();
+        const data = await addTodoTaskAction(token, dbPayload);
+        createdTask = mapTodoTaskFromDb(data);
       } catch (err) {
         console.warn("Error inserting task to Supabase, falling back to LocalStorage:", err);
         const tasks = getStorageItem('todo_tasks', initialTodoTasks);
@@ -1417,16 +1489,11 @@ export const dataService = {
   toggleTodoTask: async (taskId: string): Promise<TodoTask> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data: current, error: getErr } = await supabase.from('todo_tasks').select('status').eq('id', taskId).single();
-        if (getErr) throw getErr;
+        const token = await getAuthToken();
+        const tasks = await getTodoTasksAction(token);
+        const current = tasks.find((t: any) => t.id === taskId);
         const nextStatus = current?.status.toLowerCase() === 'completed' ? 'pending' : 'completed';
-        const { data, error: updateErr } = await supabase
-          .from('todo_tasks')
-          .update({ status: nextStatus })
-          .eq('id', taskId)
-          .select()
-          .single();
-        if (updateErr) throw updateErr;
+        const data = await updateTodoTaskStatusAction(token, taskId, nextStatus);
         return mapTodoTaskFromDb(data);
       } catch (err) {
         console.warn("Failed to toggle task status in Supabase, falling back to LocalStorage:", err);
@@ -1456,8 +1523,8 @@ export const dataService = {
   wipeCompletedTasks: async (): Promise<void> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase.from('todo_tasks').delete().eq('status', 'completed');
-        if (error) throw error;
+        const token = await getAuthToken();
+        await wipeCompletedTasksAction(token);
       } catch (err) {
         console.warn("Failed to wipe completed tasks in Supabase, falling back to LocalStorage:", err);
         const tasks = getStorageItem('todo_tasks', initialTodoTasks);
@@ -1477,11 +1544,8 @@ export const dataService = {
   getScheduledSessions: async (): Promise<ScheduledSession[]> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('scheduled_sessions').select('*');
-        if (error) {
-          console.warn("Failed to fetch scheduled sessions from Supabase, falling back to LocalStorage:", error);
-          return getStorageItem('scheduled_sessions', initialScheduledSessions);
-        }
+        const token = await getAuthToken();
+        const data = await getScheduledSessionsAction(token);
         return (data || []).map((session: any) => ({
           ...session,
           status: session.status || 'scheduled',
@@ -1548,20 +1612,12 @@ export const dataService = {
       try {
         // Omit session_notes since it does not exist in the remote scheduled_sessions database table
         const { session_notes, ...dbPayload } = newSession;
-        const { data, error } = await supabase.from('scheduled_sessions').insert([dbPayload]).select().single();
-        if (error) {
-          console.warn("Failed to insert scheduled session to Supabase, falling back to LocalStorage:", error);
-          const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
-          sessions.push(newSession);
-          setStorageItem('scheduled_sessions', sessions);
-          notifySubscribers('scheduled_sessions', 'INSERT', newSession);
-          createdSession = newSession;
-        } else {
-          createdSession = {
-            ...data,
-            session_notes: session_notes || 'Therapy and spinal alignment routines.'
-          };
-        }
+        const token = await getAuthToken();
+        const data = await addScheduledSessionAction(token, dbPayload);
+        createdSession = {
+          ...data,
+          session_notes: session_notes || 'Therapy and spinal alignment routines.'
+        };
       } catch (err) {
         console.warn("Error inserting scheduled session to Supabase, falling back to LocalStorage:", err);
         const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
@@ -1604,13 +1660,8 @@ export const dataService = {
 
   updateScheduledSessionStatus: async (sessionId: string, status: 'scheduled' | 'completed' | 'cancelled'): Promise<ScheduledSession> => {
     if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('scheduled_sessions')
-        .update({ status })
-        .eq('id', sessionId)
-        .select()
-        .single();
-      if (error) throw error;
+      const token = await getAuthToken();
+      const data = await updateScheduledSessionStatusAction(token, sessionId, status);
       return {
         ...data,
         session_notes: data.session_notes || 'Therapy and spinal alignment routines.'
@@ -1631,8 +1682,8 @@ export const dataService = {
   deleteScheduledSession: async (sessionId: string): Promise<void> => {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { error } = await supabase.from('scheduled_sessions').delete().eq('id', sessionId);
-        if (error) throw error;
+        const token = await getAuthToken();
+        await deleteScheduledSessionAction(token, sessionId);
       } catch (err) {
         console.warn("Failed to delete scheduled session in Supabase, falling back to LocalStorage:", err);
         const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
@@ -1653,12 +1704,9 @@ export const dataService = {
     const tenant = await dataService.getTenant();
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('tenant_resource_metrics')
-          .select('*')
-          .eq('tenant_id', tenant.id)
-          .single();
-        if (!error && data) {
+        const token = await getAuthToken();
+        const data = await getTenantResourceMetricsAction(token, tenant.id);
+        if (data) {
           // Convert estimated_database_storage_bytes and total_file_storage_bytes to MB
           const dbUsed = Number(data.estimated_database_storage_bytes || 0) / (1024 * 1024);
           const fileUsed = Number(data.total_file_storage_bytes || 0) / (1024 * 1024);
@@ -1728,23 +1776,12 @@ export const dataService = {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data: userData, error: userErr } = await supabase.from('users').select('*').eq('id', staffId).single();
-        if (!userErr && userData) {
-          staff = {
-            ...userData,
-            can_manage_staff: userData.resource_fhir?.can_manage_staff !== undefined
-              ? userData.resource_fhir.can_manage_staff
-              : (userData.position_role === 'Admin')
-          };
+        const users = await dataService.getUsers();
+        const userData = users.find(u => u.id === staffId);
+        if (userData) {
+          staff = userData;
         }
-        const { data: sessData, error: sessErr } = await supabase.from('scheduled_sessions').select('*');
-        if (!sessErr && sessData) {
-          sessions = sessData.map((s: any) => ({
-            ...s,
-            status: s.status || 'scheduled',
-            session_notes: s.session_notes || 'Therapy routine.'
-          }));
-        }
+        sessions = await dataService.getScheduledSessions();
       } catch (err) {
         console.warn("Failed to fetch payout data from Supabase, falling back to LocalStorage:", err);
       }
@@ -1885,11 +1922,8 @@ export const dataService = {
     };
 
     if (isSupabaseConfigured && supabase) {
-      // Insert tenant and then insert public.users row
-      const { error: tErr } = await supabase.from('tenants').insert([newTenant]);
-      if (tErr) throw tErr;
-      const { error: uErr } = await supabase.from('users').insert([firstAdmin]);
-      if (uErr) throw uErr;
+      // Insert tenant and then insert public.users row via server action
+      await initializeTenantAction(newTenant, firstAdmin);
     } else {
       // Mock reset with new tenant
       setStorageItem('tenant', newTenant);
@@ -1944,36 +1978,10 @@ export const dataService = {
     }
   ): Promise<void> => {
     if (isSupabaseConfigured && supabase) {
-      // 1. Update the existing tenant record
-      const { error: tErr } = await supabase
-        .from('tenants')
-        .update({
-          business_name: onboardingData.business_name,
-          business_type: onboardingData.business_type,
-          clinic_start_time: onboardingData.clinic_start_time,
-          clinic_end_time: onboardingData.clinic_end_time,
-          max_db_storage_mb: onboardingData.max_db_storage_mb,
-          max_file_storage_mb: onboardingData.max_file_storage_mb,
-        })
-        .eq('id', tenantId);
-      if (tErr) throw tErr;
-
-      // 2. Update the existing user's full name in public.users
+      const token = await getAuthToken();
       const { data: userData } = await supabase.auth.getUser();
-      if (userData?.user) {
-        const { error: uErr } = await supabase
-          .from('users')
-          .update({
-            full_name: onboardingData.admin_name,
-            resource_fhir: {
-              resourceType: 'Practitioner',
-              active: true,
-              name: [{ text: onboardingData.admin_name }]
-            }
-          })
-          .eq('id', userData.user.id);
-        if (uErr) throw uErr;
-      }
+      if (!userData?.user) throw new Error("No active user session found.");
+      await completeOnboardingAction(token, tenantId, onboardingData, userData.user.id);
     } else {
       // Mock mode completion
       const tenant = getStorageItem('tenant', initialTenant);
@@ -2039,4 +2047,3 @@ export const dataService = {
     notifySubscribers('notifications', 'UPDATE', { id: 'all_user_' + userId });
   },
 };
-

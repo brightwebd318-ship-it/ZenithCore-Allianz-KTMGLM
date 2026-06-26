@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Briefcase, ShieldCheck, UserCheck, X, Activity, Heart, Stethoscope, Plus, CheckSquare } from 'lucide-react';
 import { dataService } from '../services/dataService';
+import { verifyAndLinkTenantAction } from '../app/actions';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface OnboardingWizardProps {
@@ -86,26 +87,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         const targetTenantId = supabaseTenantId.trim();
 
         if (isSupabaseConfigured && supabase) {
-          // 1. Verify that the entered tenant ID exists in tenants table
-          const { data: tenantData, error: tenantErr } = await supabase
-            .from('tenants')
-            .select('id, business_name')
-            .eq('id', targetTenantId)
-            .single();
-
-          if (tenantErr || !tenantData) {
-            throw new Error("The entered Tenant ID does not exist in your Supabase database. Please check the ID.");
-          }
-
-          // 2. Update the user profile users table to set tenant_id to the entered tenant ID
-          const { data: userData } = await supabase.auth.getUser();
-          if (userData?.user) {
-            const { error: uErr } = await supabase
-              .from('users')
-              .update({ tenant_id: targetTenantId })
-              .eq('id', userData.user.id);
-            if (uErr) throw uErr;
-          }
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token || '';
+          await verifyAndLinkTenantAction(token, targetTenantId);
         } else {
           // Mock mode completion
           const mockTenant = {

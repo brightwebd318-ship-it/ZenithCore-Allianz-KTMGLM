@@ -129,6 +129,13 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
     }
   };
 
+  const handleViewInvoicePDF = async (invoice: Invoice) => {
+    setPrintableInvoice(invoice);
+    const patient = patients.find(p => p.id === invoice.patient_id);
+    const patientName = patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family}` : 'Unknown';
+    await dataService.addAuditTrail('READ_PATIENT', `Viewed/Printed Invoice PDF (ID: ${invoice.resource_fhir?.identifier?.[0]?.value || invoice.id}) for Patient: ${patientName} (ID: ${invoice.patient_id})`);
+  };
+
   const handleUpdateStatus = async (invId: string, status: Invoice['payment_status']) => {
     try {
       await dataService.updateInvoiceStatus(invId, status);
@@ -522,7 +529,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                           </button>
                         )}
                         <button
-                          onClick={() => setPrintableInvoice(invoice)}
+                          onClick={() => handleViewInvoicePDF(invoice)}
                           className="bg-brand-50 text-brand-600 text-[10px] font-bold px-2 py-1 rounded border border-brand-100 dark:bg-brand-950/20 dark:text-brand-400 hover:bg-brand-100 inline-flex items-center space-x-1"
                           title="View printable/downloadable receipt"
                         >
