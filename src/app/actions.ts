@@ -136,13 +136,13 @@ export async function createStaffAuthAction(
       can_view_medical_history: true,
       can_manage_finance: false,
       can_print_generate_invoice: true,
-      can_manage_staff: false,
       base_salary_monthly: 45000,
       bonus_system_enabled: false,
       resource_fhir: {
         resourceType: 'Practitioner',
         active: true,
-        name: [{ text: fullName || userEmail.split('@')[0] }]
+        name: [{ text: fullName || userEmail.split('@')[0] }],
+        can_manage_staff: role === 'Admin'
       }
     })
     .select()
@@ -563,6 +563,15 @@ export async function deleteStaffAction(accessToken: string, userId: string) {
   }
 
   const adminClient = createAdminSupabaseClient();
+
+  // 1.5. Satisfy foreign key constraint on invoices by setting associated_practitioner_id to null
+  const { error: invErr } = await adminClient
+    .from('invoices')
+    .update({ associated_practitioner_id: null })
+    .eq('associated_practitioner_id', userId);
+  if (invErr) {
+    console.warn("Failed to set associated_practitioner_id to null in invoices, proceeding:", invErr);
+  }
   
   // Delete from auth.users if they exist
   try {

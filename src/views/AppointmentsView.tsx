@@ -104,12 +104,22 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
 
   const handleBookSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!patientId || !staffId) return;
+    if (!patientId || !staffId) {
+      setBookingError("Please select both a patient and an assigned practitioner.");
+      return;
+    }
+    if (!sessionDate || !startTime) {
+      setBookingError("Please enter a valid session date and start time.");
+      return;
+    }
     setBookingError(null);
 
     try {
       // Calculate local Date objects to prevent timezone shifting
       const localStart = new Date(`${sessionDate}T${startTime}:00`);
+      if (isNaN(localStart.getTime())) {
+        throw new Error("Invalid start date or time format. Please check your inputs.");
+      }
       const localEnd = new Date(localStart.getTime() + numSessions * 45 * 60 * 1000);
       const startIso = localStart.toISOString();
       const endIso = localEnd.toISOString();

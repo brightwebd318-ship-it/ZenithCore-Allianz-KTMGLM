@@ -783,6 +783,7 @@ export const dataService = {
 
     const resourceFhir = {
       ...(current.resource_fhir || {}),
+      ...(updates.resource_fhir || {}),
     };
     if (updates.can_manage_staff !== undefined) {
       resourceFhir.can_manage_staff = updates.can_manage_staff;
@@ -1633,8 +1634,8 @@ export const dataService = {
     if (!session.start_time || !session.end_time) {
       throw new Error("Start and end times are required.");
     }
-    const startB = new Date(session.start_time.substring(0, 19)).getTime();
-    const endB = new Date(session.end_time.substring(0, 19)).getTime();
+    const startB = new Date(session.start_time).getTime();
+    const endB = new Date(session.end_time).getTime();
     if (endB <= startB) {
       throw new Error("Session end time must be after the start time.");
     }
@@ -1646,8 +1647,8 @@ export const dataService = {
         if (s.practitioner_id !== session.practitioner_id) return false;
         if (!s.start_time || !s.end_time) return false;
         if (s.status === 'cancelled') return false; // Cancelled appointments don't block slots!
-        const startA = new Date(s.start_time.substring(0, 19)).getTime();
-        const endA = new Date(s.end_time.substring(0, 19)).getTime();
+        const startA = new Date(s.start_time).getTime();
+        const endA = new Date(s.end_time).getTime();
         return startA < endB && startB < endA;
       });
 
@@ -1679,12 +1680,8 @@ export const dataService = {
           session_notes: data.session_notes || ''
         };
       } catch (err) {
-        console.warn("Error inserting scheduled session to Supabase, falling back to LocalStorage:", err);
-        const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
-        sessions.push(newSession);
-        setStorageItem('scheduled_sessions', sessions);
-        notifySubscribers('scheduled_sessions', 'INSERT', newSession);
-        createdSession = newSession;
+        console.error("Error inserting scheduled session to Supabase:", err);
+        throw err;
       }
     } else {
       const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
@@ -1745,11 +1742,8 @@ export const dataService = {
         const token = await getAuthToken();
         await deleteScheduledSessionAction(token, sessionId);
       } catch (err) {
-        console.warn("Failed to delete scheduled session in Supabase, falling back to LocalStorage:", err);
-        const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
-        const remaining = sessions.filter((s) => s.id !== sessionId);
-        setStorageItem('scheduled_sessions', remaining);
-        notifySubscribers('scheduled_sessions', 'DELETE', { id: sessionId });
+        console.error("Failed to delete scheduled session in Supabase:", err);
+        throw err;
       }
     } else {
       const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
