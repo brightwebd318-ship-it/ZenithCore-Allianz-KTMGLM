@@ -114,7 +114,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   const chartData = categories.map((cat) => {
     const percentage = totalValue > 0 ? (cat.value / totalValue) * 100 : 0;
     const strokeLength = totalValue > 0 ? (cat.value / totalValue) * circumference : 0;
-    const strokeOffset = circumference - accumulatedOffset;
+    const strokeOffset = -accumulatedOffset;
     accumulatedOffset += strokeLength;
 
     return {

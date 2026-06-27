@@ -160,6 +160,13 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
     }
   };
 
+  // Filter staff whose DOJ (created_at) is at or before the selected targetMonth
+  const visibleStaff = staffList.filter((member) => {
+    if (!member.created_at) return true;
+    const dojMonth = member.created_at.substring(0, 7); // "YYYY-MM"
+    return targetMonth >= dojMonth;
+  });
+
   // Calculations for KPI Cards
   let totalBaseSalary = 0;
   let totalClinicalHours = 0;
@@ -167,7 +174,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
   let totalBonusValue = 0;
   let totalPayoutValue = 0;
 
-  staffList.forEach((member) => {
+  visibleStaff.forEach((member) => {
     const details = payrollDetails[member.id];
     if (details) {
       totalBaseSalary += details.base_salary;
@@ -372,12 +379,12 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                 <tr>
                   <td colSpan={9} className="text-center py-8 text-slate-400 italic">Recalculating ledger records...</td>
                 </tr>
-              ) : staffList.length === 0 ? (
+              ) : visibleStaff.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="text-center py-8 text-slate-400 italic">No staff profiles found.</td>
                 </tr>
               ) : (
-                staffList.map((member) => {
+                visibleStaff.map((member) => {
                   const details = payrollDetails[member.id] || {
                     base_salary: member.base_salary_monthly || 0,
                     sessions_conducted: 0,
@@ -463,7 +470,9 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                       </td>
 
                       {/* Total Payout */}
-                      <td className="px-5 py-4 text-right font-mono font-extrabold text-slate-900 dark:text-white bg-slate-50/20 dark:bg-slate-800/10 text-sm">
+                      <td className={`px-5 py-4 text-right font-mono font-extrabold bg-slate-50/20 dark:bg-slate-800/10 text-sm ${
+                        matchedExpense ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-slate-900 dark:text-white'
+                      }`}>
                         ₹{finalPayout.toLocaleString('en-IN')}
                       </td>
 

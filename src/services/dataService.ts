@@ -88,6 +88,7 @@ export interface User {
   base_salary_monthly: number;
   bonus_system_enabled: boolean;
   resource_fhir: any; // Practitioner v6.0
+  created_at?: string;
 }
 
 export interface Patient {
@@ -276,6 +277,7 @@ const initialUsers: User[] = [
     base_salary_monthly: 75000,
     bonus_system_enabled: true,
     resource_fhir: { resourceType: 'Practitioner', active: true, name: [{ text: 'Dibin' }] },
+    created_at: '2026-06-01T00:00:00.000Z',
   },
   {
     id: 'u2222222-2222-2222-2222-222222222222',
@@ -292,6 +294,7 @@ const initialUsers: User[] = [
     base_salary_monthly: 60000,
     bonus_system_enabled: true,
     resource_fhir: { resourceType: 'Practitioner', active: true, name: [{ text: 'Dr. Ananya Sharma' }] },
+    created_at: '2026-06-01T00:00:00.000Z',
   },
   {
     id: 'u3333333-3333-3333-3333-333333333333',
@@ -308,6 +311,7 @@ const initialUsers: User[] = [
     base_salary_monthly: 30000,
     bonus_system_enabled: false,
     resource_fhir: { resourceType: 'Practitioner', active: true, name: [{ text: 'Rohan Mehta' }] },
+    created_at: '2026-06-01T00:00:00.000Z',
   },
 ];
 
@@ -839,6 +843,7 @@ export const dataService = {
       id: user.id || generateUUID(),
       tenant_id: tenant.id,
       resource_fhir: resourceFhir,
+      created_at: new Date().toISOString(),
     };
 
     if (isSupabaseConfigured && supabase) {

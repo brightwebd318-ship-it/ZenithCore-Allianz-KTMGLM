@@ -11,7 +11,8 @@ import {
   Clock,
   Users,
   HardDrive,
-  Activity
+  Activity,
+  Trash2
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { SystemAuditTrail, User as StaffUser } from '../services/dataService';
@@ -175,6 +176,25 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleDownloadLogs = () => {
+    if (auditTrails.length === 0) {
+      alert("No audit logs available to download.");
+      return;
+    }
+    
+    let logContent = `Zenith Core Alliance - System Audit Log File\n`;
+    logContent += `Generated At: ${new Date().toLocaleString('en-IN')}\n`;
+    logContent += `========================================================\n\n`;
+    
+    auditTrails.forEach((trail) => {
+      const timeStr = new Date(trail.created_at).toISOString();
+      logContent += `[${timeStr}] [${trail.action_type}] ${trail.description} (By: ${trail.performed_by})\n`;
+    });
+    
+    const stamp = new Date().toISOString().split('T')[0];
+    triggerDownload(logContent, `zenith_audit_trail_${stamp}.log`, 'text/plain');
   };
 
   // 3. AWS MIGRATION READY EXPORT ENGINE
@@ -668,6 +688,29 @@ CREATE TABLE scheduled_sessions (
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
+            {/* Download and Purge Buttons */}
+            <button
+              onClick={handleDownloadLogs}
+              className="flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition-all dark:bg-slate-800 dark:border-slate-700 dark:text-slate-350 dark:hover:bg-slate-700/50"
+              title="Download all forensic logs as a text file"
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5 text-brand-500" />
+              <span>Download Log</span>
+            </button>
+
+            <button
+              onClick={() => {
+                if (confirm("Are you absolutely sure you want to purge all forensic audit logs? Download the log file first to save a backup!")) {
+                  handleTruncateAuditTrails();
+                }
+              }}
+              className="flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-650 font-bold text-xs px-3 py-1.5 rounded-lg border border-red-100 transition-all dark:bg-red-950/20 dark:border-red-900/30 dark:text-red-405"
+              title="Delete all logs from the database to save space"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5 text-red-500" />
+              <span>Purge Logs</span>
+            </button>
+
             {/* Search Input */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
