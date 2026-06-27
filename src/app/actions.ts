@@ -123,33 +123,94 @@ export async function createStaffAuthAction(
   const newUserId = authData.user.id;
 
   // 3. Link/Upsert to public profile
+  const profilePayload: any = {
+    id: newUserId,
+    tenant_id: tenantUuid,
+    email: userEmail,
+    full_name: fullName || userEmail.split('@')[0],
+    position_role: role || 'Receptionist',
+    medical_council_registration_no: 'IMR/TEMP-STAFF',
+    can_view_personal_data: true,
+    can_view_medical_history: true,
+    can_manage_finance: false,
+    can_print_generate_invoice: true,
+    base_salary_monthly: 45000,
+    bonus_system_enabled: false,
+    resource_fhir: {
+      resourceType: 'Practitioner',
+      active: true,
+      name: [{ text: fullName || userEmail.split('@')[0] }],
+      can_manage_staff: role === 'Admin'
+    }
+  };
+
+  if (targetUserId && targetUserId !== newUserId) {
+    // 3.1. Update all referencing tables to use newUserId
+    await adminClient
+      .from('clinical_logs')
+      .update({ author_id: newUserId })
+      .eq('author_id', targetUserId);
+
+    await adminClient
+      .from('invoices')
+      .update({ generated_by: newUserId })
+      .eq('generated_by', targetUserId);
+
+    await adminClient
+      .from('invoices')
+      .update({ associated_practitioner_id: newUserId })
+      .eq('associated_practitioner_id', targetUserId);
+
+    await adminClient
+      .from('todo_tasks')
+      .update({ assigned_to: newUserId })
+      .eq('assigned_to', targetUserId);
+
+    await adminClient
+      .from('todo_tasks')
+      .update({ created_by: newUserId })
+      .eq('created_by', targetUserId);
+
+    await adminClient
+      .from('scheduled_sessions')
+      .update({ practitioner_id: newUserId })
+      .eq('practitioner_id', targetUserId);
+
+    // 3.2. Fetch existing profile so custom clearances, salary, etc. are preserved
+    const { data: oldProfile } = await adminClient
+      .from('users')
+      .select('*')
+      .eq('id', targetUserId)
+      .single();
+
+    if (oldProfile) {
+      Object.assign(profilePayload, {
+        medical_council_registration_no: oldProfile.medical_council_registration_no || profilePayload.medical_council_registration_no,
+        can_view_personal_data: oldProfile.can_view_personal_data ?? profilePayload.can_view_personal_data,
+        can_view_medical_history: oldProfile.can_view_medical_history ?? profilePayload.can_view_medical_history,
+        can_manage_finance: oldProfile.can_manage_finance ?? profilePayload.can_manage_finance,
+        can_print_generate_invoice: oldProfile.can_print_generate_invoice ?? profilePayload.can_print_generate_invoice,
+        base_salary_monthly: oldProfile.base_salary_monthly ?? profilePayload.base_salary_monthly,
+        bonus_system_enabled: oldProfile.bonus_system_enabled ?? profilePayload.bonus_system_enabled,
+        resource_fhir: oldProfile.resource_fhir ?? profilePayload.resource_fhir
+      });
+
+      // 3.3. Delete the old user row
+      await adminClient
+        .from('users')
+        .delete()
+        .eq('id', targetUserId);
+    }
+  }
+
   const { data, error: dbErr } = await adminClient
     .from('users')
-    .upsert({
-      id: targetUserId || newUserId,
-      tenant_id: tenantUuid,
-      email: userEmail,
-      full_name: fullName || userEmail.split('@')[0],
-      position_role: role || 'Receptionist',
-      medical_council_registration_no: 'IMR/TEMP-STAFF',
-      can_view_personal_data: true,
-      can_view_medical_history: true,
-      can_manage_finance: false,
-      can_print_generate_invoice: true,
-      base_salary_monthly: 45000,
-      bonus_system_enabled: false,
-      resource_fhir: {
-        resourceType: 'Practitioner',
-        active: true,
-        name: [{ text: fullName || userEmail.split('@')[0] }],
-        can_manage_staff: role === 'Admin'
-      }
-    })
+    .upsert(profilePayload)
     .select()
     .single();
 
   if (dbErr) throw dbErr;
-  return targetUserId || newUserId;
+  return newUserId;
 }
 
 export async function pauseStaffAuthAction(accessToken: string, targetUserId: string, shouldPause: boolean) {
