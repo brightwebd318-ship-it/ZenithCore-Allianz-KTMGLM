@@ -195,6 +195,7 @@ export default function Home() {
             triggerRefreshKey={refreshKey}
             selectedAppointmentId={selectedAppointmentId}
             setSelectedAppointmentId={setSelectedAppointmentId}
+            currentUser={currentUser}
           />
         );
       case 'Tasks':

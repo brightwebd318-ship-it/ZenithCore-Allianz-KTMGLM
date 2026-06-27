@@ -623,6 +623,13 @@ export async function deleteStaffAction(accessToken: string, userId: string) {
     throw new Error("Access Denied: Only Admin users can delete accounts.");
   }
 
+  // Fetch the target user profile's email so we can delete their auth account even if IDs are mismatched
+  const { data: targetUser } = await userClient
+    .from('users')
+    .select('email')
+    .eq('id', userId)
+    .single();
+
   const adminClient = createAdminSupabaseClient();
 
   // 1.5. Satisfy foreign key constraint on invoices by setting associated_practitioner_id to null
@@ -634,14 +641,38 @@ export async function deleteStaffAction(accessToken: string, userId: string) {
     console.warn("Failed to set associated_practitioner_id to null in invoices, proceeding:", invErr);
   }
   
-  // Delete from auth.users if they exist
-  try {
-    await adminClient.auth.admin.deleteUser(userId);
-  } catch (err) {
-    console.warn("Failed to delete auth user, proceeding:", err);
+  // 2. Delete credentials from Supabase authentication
+  let authDeleted = false;
+  if (targetUser && targetUser.email) {
+    try {
+      const { data: { users }, error: listErr } = await adminClient.auth.admin.listUsers();
+      if (!listErr && users) {
+        const authUser = users.find((u) => u.email?.toLowerCase() === targetUser.email.toLowerCase());
+        if (authUser) {
+          const { error: delErr } = await adminClient.auth.admin.deleteUser(authUser.id);
+          if (delErr) {
+            console.warn(`Failed to delete auth user by email-resolved ID (${authUser.id}):`, delErr);
+          } else {
+            authDeleted = true;
+            console.log(`Successfully deleted auth credentials for email: ${targetUser.email}`);
+          }
+        }
+      } else if (listErr) {
+        console.warn("Failed to list auth users to find by email:", listErr);
+      }
+    } catch (err) {
+      console.warn("Failed to delete auth user by email, trying by ID:", err);
+    }
   }
 
-  // Delete from public.users
+  if (!authDeleted) {
+    const { error: delErr } = await adminClient.auth.admin.deleteUser(userId);
+    if (delErr) {
+      console.warn("Failed to delete auth user by profile ID:", delErr);
+    }
+  }
+
+  // 3. Delete from public.users
   const { error: dbErr } = await adminClient
     .from('users')
     .delete()

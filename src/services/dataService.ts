@@ -1612,7 +1612,7 @@ export const dataService = {
         return (data || []).map((session: any) => ({
           ...session,
           status: session.status || 'scheduled',
-          session_notes: session.session_notes || ''
+          session_notes: session.next_session_notes || session.session_notes || ''
         }));
       } catch (err) {
         console.warn("Error fetching scheduled sessions from Supabase, falling back to LocalStorage:", err);
@@ -1662,28 +1662,40 @@ export const dataService = {
       console.warn("Failed to perform conflict validation, proceeding:", e);
     }
 
-    const newSession: ScheduledSession = {
-      ...session,
+    // Map session_notes to next_session_notes database column for Supabase payload
+    const dbPayload: any = {
       id: generateUUID(),
       tenant_id: tenant.id,
+      patient_id: session.patient_id,
+      practitioner_id: session.practitioner_id,
+      start_time: session.start_time,
+      end_time: session.end_time,
       status: session.status || 'scheduled',
       created_at: new Date().toISOString(),
     };
 
     let createdSession: ScheduledSession;
     if (isSupabaseConfigured && supabase) {
+      dbPayload.next_session_notes = session.session_notes;
       try {
         const token = await getAuthToken();
-        const data = await addScheduledSessionAction(token, newSession);
+        const data = await addScheduledSessionAction(token, dbPayload);
         createdSession = {
           ...data,
-          session_notes: data.session_notes || ''
+          session_notes: data.next_session_notes || data.session_notes || ''
         };
       } catch (err) {
         console.error("Error inserting scheduled session to Supabase:", err);
         throw err;
       }
     } else {
+      const newSession: ScheduledSession = {
+        ...session,
+        id: dbPayload.id,
+        tenant_id: dbPayload.tenant_id,
+        status: dbPayload.status,
+        created_at: dbPayload.created_at,
+      };
       const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
       sessions.push(newSession);
       setStorageItem('scheduled_sessions', sessions);
@@ -1721,7 +1733,7 @@ export const dataService = {
       const data = await updateScheduledSessionStatusAction(token, sessionId, status);
       return {
         ...data,
-        session_notes: data.session_notes || ''
+        session_notes: data.next_session_notes || data.session_notes || ''
       };
     } else {
       const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);

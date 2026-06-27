@@ -159,15 +159,23 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
       });
 
       // Optionally create Supabase Auth credentials and link
+      let finalUserId = createdStaff.id;
       if (createLoginAccount && loginPassword.trim()) {
-        await dataService.createStaffAuthUser(
+        const newId = await dataService.createStaffAuthUser(
           email,
           loginPassword,
           fullName,
           role,
           createdStaff.id
         );
+        finalUserId = newId;
         await dataService.addAuditTrail('FINANCIAL_MUTATION', `Created Supabase login account for new staff: ${fullName}`);
+        
+        // Optimistically update auth statuses
+        setAuthStatuses((prev) => [
+          ...prev.filter(s => s.id !== createdStaff.id && s.id !== newId),
+          { id: newId, exists: true, paused: false }
+        ]);
       }
 
       // Clear
@@ -180,7 +188,17 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
       setShowAddForm(false);
       
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Added new staff directory profile: ${fullName}`);
-      triggerRefresh();
+      
+      // Optimistically update the user list with the new ID
+      const updatedStaff = { ...createdStaff, id: finalUserId };
+      setStaffList((prev) => [
+        ...prev.filter(u => u.id !== createdStaff.id),
+        updatedStaff
+      ]);
+
+      setTimeout(() => {
+        triggerRefresh();
+      }, 500);
     } catch (err) {
       console.error(err);
       alert(err instanceof Error ? err.message : "Failed to add staff profile or create login credentials.");
@@ -815,7 +833,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                 e.preventDefault();
                 if (!promptPasswordText.trim()) return;
                 try {
-                  await dataService.createStaffAuthUser(
+                  const newId = await dataService.createStaffAuthUser(
                     promptPasswordUser.email,
                     promptPasswordText,
                     promptPasswordUser.full_name,
@@ -823,9 +841,22 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                     promptPasswordUser.id
                   );
                   await dataService.addAuditTrail('FINANCIAL_MUTATION', `Created Supabase login account for existing staff: ${promptPasswordUser.full_name}`);
+                  
+                  // Optimistically update state
+                  setAuthStatuses((prev) => [
+                    ...prev.filter(s => s.id !== promptPasswordUser.id && s.id !== newId),
+                    { id: newId, exists: true, paused: false }
+                  ]);
+                  setStaffList((prev) =>
+                    prev.map((u) => (u.id === promptPasswordUser.id ? { ...u, id: newId } : u))
+                  );
+
                   setPromptPasswordUser(null);
                   setPromptPasswordText('');
-                  triggerRefresh();
+                  
+                  setTimeout(() => {
+                    triggerRefresh();
+                  }, 500);
                 } catch (err: any) {
                   alert(err?.message || "Failed to create Supabase auth account.");
                 }

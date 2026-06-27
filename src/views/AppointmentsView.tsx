@@ -8,6 +8,7 @@ interface AppointmentsViewProps {
   triggerRefreshKey: number;
   selectedAppointmentId: string | null;
   setSelectedAppointmentId: (id: string | null) => void;
+  currentUser: StaffUser | null;
 }
 
 export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
@@ -15,6 +16,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   triggerRefreshKey,
   selectedAppointmentId,
   setSelectedAppointmentId,
+  currentUser,
 }) => {
   const [sessions, setSessions] = useState<ScheduledSession[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -143,15 +145,89 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
     }
   };
 
+  const canAcceptSession = (session: ScheduledSession) => {
+    if (!currentUser) return false;
+    if (currentUser.position_role === 'Admin') return true;
+    return session.practitioner_id === currentUser.id;
+  };
+
+  const notifyAdmins = async (
+    actionType: 'COMPLETED' | 'CANCELLED' | 'DELETED',
+    session: ScheduledSession
+  ) => {
+    try {
+      const patient = patients.find(p => p.id === session.patient_id);
+      const practitioner = staff.find(s => s.id === session.practitioner_id);
+      const patientName = patient
+        ? `${patient.resource_fhir?.name?.[0]?.given?.[0] || ''} ${patient.resource_fhir?.name?.[0]?.family || ''}`.trim()
+        : 'Unknown Patient';
+      const practitionerName = practitioner ? practitioner.full_name : 'Specialist';
+      
+      const appTime = new Date(session.start_time).toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+      
+      const performerName = currentUser ? currentUser.full_name : 'Unknown User';
+      const nowStr = new Date().toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+
+      let title = '';
+      let description = '';
+
+      if (actionType === 'COMPLETED') {
+        title = 'Appointment Completed';
+        description = `Appointment for ${patientName} (assigned to Dr. ${practitionerName}) on ${appTime} was marked as COMPLETED by ${performerName} on ${nowStr}.`;
+      } else if (actionType === 'CANCELLED') {
+        title = 'Appointment Cancelled';
+        description = `Appointment for ${patientName} (assigned to Dr. ${practitionerName}) on ${appTime} was CANCELLED by ${performerName} on ${nowStr}.`;
+      } else if (actionType === 'DELETED') {
+        title = 'Appointment Deleted';
+        description = `Appointment slot for ${patientName} (assigned to Dr. ${practitionerName}) on ${appTime} was DELETED by ${performerName} on ${nowStr}.`;
+      }
+
+      // Find all admin users
+      const admins = staff.filter(u => u.position_role === 'Admin');
+      for (const admin of admins) {
+        await dataService.addNotification({
+          user_id: admin.id,
+          title,
+          description,
+          target_id: session.id
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to notify admins of appointment mutation:", err);
+    }
+  };
+
   const handleDeleteSession = async (sessionId: string) => {
     try {
+      const session = sessions.find((s) => s.id === sessionId);
+      if (!session) return;
+
       await dataService.deleteScheduledSession(sessionId);
       await dataService.addAuditTrail('READ_PATIENT', `Cancelled scheduled session ID ${sessionId}`);
+      
+      // Send notification to admins
+      await notifyAdmins('DELETED', session);
+      
       triggerRefresh();
     } catch (err) {
       console.error(err);
     }
   };
+
   const handleUpdateStatus = async (sessionId: string, status: 'completed' | 'cancelled') => {
     try {
       const session = sessions.find((s) => s.id === sessionId);
@@ -162,6 +238,10 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
         'READ_PATIENT',
         `Marked appointment session for patient ID ${session.patient_id} as ${status === 'completed' ? 'Completed/Done' : 'Cancelled'}`
       );
+      
+      // Send notification to admins
+      await notifyAdmins(status === 'completed' ? 'COMPLETED' : 'CANCELLED', session);
+      
       triggerRefresh();
     } catch (err) {
       console.error("Failed to update session status:", err);
@@ -351,41 +431,50 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                       <div className="flex items-center space-x-2 self-center">
                         {session.status === 'scheduled' && (
                           <>
-                            <button
-                              onClick={() => handleUpdateStatus(session.id, 'completed')}
-                              className="text-[10px] bg-emerald-50 border border-emerald-250 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded font-bold transition-all dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-450"
-                              title="Mark Done"
-                            >
-                              ✓ Done
-                            </button>
-                            <button
-                              onClick={() => handleUpdateStatus(session.id, 'cancelled')}
-                              className="text-[10px] bg-rose-50 border border-rose-250 text-rose-700 hover:bg-rose-100 px-2 py-1 rounded font-bold transition-all dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-450"
-                              title="Cancel appointment"
-                            >
-                              ✕ Cancel
-                            </button>
+                            {canAcceptSession(session) ? (
+                              <>
+                                <button
+                                  onClick={() => handleUpdateStatus(session.id, 'completed')}
+                                  className="text-[10px] bg-emerald-50 border border-emerald-250 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded font-bold transition-all dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-450"
+                                  title="Mark Done"
+                                >
+                                  ✓ Done
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateStatus(session.id, 'cancelled')}
+                                  className="text-[10px] bg-rose-50 border border-rose-250 text-rose-700 hover:bg-rose-100 px-2 py-1 rounded font-bold transition-all dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-450"
+                                  title="Cancel appointment"
+                                >
+                                  ✕ Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-[9px] uppercase font-bold text-slate-400 border border-slate-200 px-2 py-1 rounded select-none dark:border-slate-800 dark:text-slate-500" title="Only Admin or assigned therapist can complete/cancel this session">
+                                Locked
+                              </span>
+                            )}
                           </>
                         )}
                         {session.status !== 'scheduled' && (
                           <span className={`text-[9px] uppercase font-extrabold px-2 py-0.5 rounded border ${
                             session.status === 'completed'
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/10 dark:border-emerald-900/30 dark:text-emerald-400'
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/10 dark:border-emerald-900/30 dark:text-emerald-450'
                               : 'bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
                           }`}>
                             {session.status === 'completed' ? 'Completed' : 'Cancelled'}
                           </span>
                         )}
                         
-                        <button
-                          onClick={() => handleDeleteSession(session.id)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all self-center"
-                          title="Remove session slot"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canAcceptSession(session) && (
+                          <button
+                            onClick={() => handleDeleteSession(session.id)}
+                            className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all self-center"
+                            title="Remove session slot"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
-
                     </div>
                   );
                 })
