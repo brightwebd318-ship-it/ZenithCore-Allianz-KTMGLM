@@ -188,8 +188,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               <Kanban className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white font-outfit">Workspace Kanban Logistics</h2>
-              <p className="text-xs text-slate-450 dark:text-slate-400">Manage, assign, and track patient-care tasks and clinic operational flows.</p>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white font-outfit">Task Management</h2>
             </div>
           </div>
 

@@ -29,11 +29,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   // Selected patient metadata (to show real-time GST status)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
-  // Payout RPC States
-  const [payoutStaffId, setPayoutStaffId] = useState('');
-  const [payoutMonth, setPayoutMonth] = useState('2026-06');
-  const [payoutResult, setPayoutResult] = useState<any | null>(null);
-  const [calculatingPayout, setCalculatingPayout] = useState(false);
+
 
   // Modals
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
@@ -55,7 +51,6 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       setStaff(st);
       if (st.length > 0) {
         setSelectedStaffId(st[0].id);
-        setPayoutStaffId(st[0].id);
       }
     } catch (err) {
       console.error('Failed to load billing data:', err);
@@ -146,22 +141,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
     }
   };
 
-  const handleCalculatePayout = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!payoutStaffId || !payoutMonth) return;
 
-    setCalculatingPayout(true);
-    setPayoutResult(null);
-    try {
-      const res = await dataService.calculateMonthlyPayout(payoutStaffId, payoutMonth);
-      setPayoutResult(res);
-      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Triggered calculate_monthly_payout RPC for staff ID: ${payoutStaffId}`);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCalculatingPayout(false);
-    }
-  };
 
   // Live Calculations for Preview card
   const sessionsCost = sessionsCount * ratePerSession;
@@ -178,8 +158,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       {/* Top Section: Form split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* Invoice Generator (Left 7 Columns) */}
-        <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
+        {/* Invoice Generator (Full Width) */}
+        <div className="lg:col-span-12 bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
           <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
             <CreditCard className="h-5 w-5 text-brand-500" />
             <h3 className="font-bold text-slate-900 dark:text-white">Itemized Invoice Generator</h3>
@@ -369,82 +349,6 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
             </div>
 
           </form>
-        </div>
-
-        {/* Payroll payout RPC calculator (Right 5 Columns) */}
-        <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
-          <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-            <UserCheck className="h-5 w-5 text-emerald-500" />
-            <h3 className="font-bold text-slate-900 dark:text-white">Calculate Practitioner Payroll</h3>
-          </div>
-
-          <form onSubmit={handleCalculatePayout} className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Select Staff</label>
-                <select
-                  value={payoutStaffId}
-                  onChange={(e) => setPayoutStaffId(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                >
-                  {staff.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Target Month</label>
-                <input
-                  type="month"
-                  value={payoutMonth}
-                  onChange={(e) => setPayoutMonth(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={calculatingPayout}
-              className="w-full bg-emerald-600 text-white font-bold text-xs py-2 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-            >
-              {calculatingPayout ? 'Invoking RPC Function...' : 'Calculate Monthly Payout'}
-            </button>
-          </form>
-
-          {/* Payslip result */}
-          {payoutResult && (
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-150 dark:bg-slate-800/40 dark:border-slate-800 space-y-3 font-mono text-xs">
-              <div className="border-b border-dashed border-slate-350 pb-2 text-center font-bold text-[11px] text-slate-700 dark:text-slate-300">
-                ZENITH CLINICAL PAYROLL STATEMENT
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span>Base Salary:</span>
-                  <span className="font-bold">₹{payoutResult.base_salary.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Sessions Conducted:</span>
-                  <span className="font-bold">{payoutResult.sessions_conducted}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Session Bonus Rate:</span>
-                  <span className="font-bold">₹{payoutResult.bonus_multiplier}</span>
-                </div>
-                <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
-                  <span>Total Calculated Bonus:</span>
-                  <span className="font-bold">+₹{payoutResult.computed_bonus.toLocaleString('en-IN')}</span>
-                </div>
-              </div>
-              <div className="border-t border-dashed border-slate-350 pt-2 flex justify-between font-bold text-sm text-slate-900 dark:text-white">
-                <span>ESTIMATED PAYOUT:</span>
-                <span>₹{payoutResult.total_payout.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-          )}
-
         </div>
 
       </div>

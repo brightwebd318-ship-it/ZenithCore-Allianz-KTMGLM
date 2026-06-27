@@ -187,6 +187,18 @@ export const Layout: React.FC<LayoutProps> = ({
     );
   };
 
+  const defaultTabsForRole = (role: string) => {
+    if (role === 'Admin') {
+      return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'];
+    } else if (role === 'Senior Therapist') {
+      return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Reports'];
+    } else {
+      return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Billing', 'Inventory'];
+    }
+  };
+
+  const enabledTabs = currentUser?.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser?.position_role || '');
+
   const navigationItems = [
     { name: 'Dashboard' as TabType, icon: LayoutDashboard },
     { name: 'Patients' as TabType, icon: Users },
@@ -198,7 +210,10 @@ export const Layout: React.FC<LayoutProps> = ({
     { name: 'Staff' as TabType, icon: UserCheck },
     { name: 'Reports' as TabType, icon: BarChart3 },
     ...(currentUser?.position_role === 'Admin' ? [{ name: 'Administrative Controls' as TabType, icon: Sliders }] : []),
-  ];
+  ].filter(item => {
+    if (item.name === 'Administrative Controls') return true;
+    return enabledTabs.includes(item.name);
+  });
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800 dark:bg-[#0B0F19] dark:text-slate-100 transition-colors duration-200">

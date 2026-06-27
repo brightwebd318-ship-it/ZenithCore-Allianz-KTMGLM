@@ -28,6 +28,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [authStatuses, setAuthStatuses] = useState<Array<{ id: string; exists: boolean; paused: boolean }>>([]);
   const [createLoginAccount, setCreateLoginAccount] = useState(false);
   const [loginPassword, setLoginPassword] = useState('');
+  const [selectedTabs, setSelectedTabs] = useState<string[]>(['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Reports']);
 
   // Existing staff account creation prompt modal
   const [promptPasswordUser, setPromptPasswordUser] = useState<StaffUser | null>(null);
@@ -110,6 +111,54 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
     }
   };
 
+  const defaultTabsForRole = (roleName: string) => {
+    if (roleName === 'Admin') {
+      return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'];
+    } else if (roleName === 'Senior Therapist') {
+      return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Reports'];
+    } else {
+      return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Billing', 'Inventory'];
+    }
+  };
+
+  const handleToggleTab = async (userId: string, tabName: string) => {
+    if (!canManageStaff) {
+      alert("Permission denied. Only staff managers or administrators can edit clearances.");
+      return;
+    }
+
+    const user = staffList.find((u) => u.id === userId);
+    if (!user) return;
+
+    const currentResource = user.resource_fhir || {};
+    const currentTabs: string[] = currentResource.enabled_tabs || defaultTabsForRole(user.position_role);
+
+    let newTabs: string[];
+    if (currentTabs.includes(tabName)) {
+      newTabs = currentTabs.filter((t) => t !== tabName);
+    } else {
+      newTabs = [...currentTabs, tabName];
+    }
+
+    const updatedResource = {
+      ...currentResource,
+      enabled_tabs: newTabs,
+    };
+
+    try {
+      await dataService.updateUserPermissions(userId, {
+        resource_fhir: updatedResource,
+      });
+      await dataService.addAuditTrail(
+        'CONSENT_CHANGED',
+        `Updated tab visibility for staff ${user.full_name}. Enabled tabs: ${newTabs.join(', ')}`
+      );
+      triggerRefresh();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleDeleteStaff = async (userId: string, name: string) => {
     if (!canManageStaff) {
       alert("Permission denied. Only staff managers or administrators can delete records.");
@@ -155,6 +204,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
           resourceType: 'Practitioner',
           active: true,
           name: [{ text: fullName }],
+          enabled_tabs: selectedTabs,
         },
       });
 
@@ -478,7 +528,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                     
                     {/* can_view_personal_data */}
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Read Demographics</span>
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Read Personal Data</span>
                       <button
                         onClick={() => handleToggleFlag(user.id, 'can_view_personal_data')}
                         className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
@@ -510,7 +560,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
 
                     {/* can_manage_finance */}
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Financial Outlays</span>
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Financial Data</span>
                       <button
                         onClick={() => handleToggleFlag(user.id, 'can_manage_finance')}
                         className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
@@ -555,6 +605,36 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                         <span className={`${user.can_manage_staff ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
                       </button>
                     </div>
+
+                    {/* Tab Navigation Access Matrix */}
+                    <div className="mt-4 pt-3 border-t border-dashed border-slate-150 dark:border-slate-800 space-y-2">
+                      <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Navigation Tabs Visibility</span>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
+                        {['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'].map((tab) => {
+                          const currentResource = user.resource_fhir || {};
+                          const currentTabs: string[] = currentResource.enabled_tabs || defaultTabsForRole(user.position_role);
+                          const isTabEnabled = currentTabs.includes(tab);
+
+                          return (
+                            <div key={tab} className="flex justify-between items-center text-[11px]">
+                              <span className="text-slate-550 dark:text-slate-400 font-semibold">{tab}</span>
+                              <button
+                                onClick={() => handleToggleTab(user.id, tab)}
+                                className={`relative inline-flex h-3.5 w-7 items-center rounded-full transition-colors focus:outline-none ${
+                                  !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                                } ${
+                                  isTabEnabled ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
+                                }`}
+                                disabled={!canManageStaff}
+                              >
+                                <span className={`${isTabEnabled ? 'translate-x-3.5' : 'translate-x-0.5'} inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform`} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               </div>
@@ -647,12 +727,42 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                 )}
               </div>
 
+              <div className="border border-slate-150 dark:border-slate-800 rounded-lg p-3.5 bg-slate-50 dark:bg-slate-900/40 space-y-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase">Visible Navigation Tabs</label>
+                <div className="grid grid-cols-3 gap-2 pt-1.5">
+                  {['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'].map((tab) => (
+                    <label key={tab} className="flex items-center space-x-2 text-xs text-slate-650 dark:text-slate-350 font-semibold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedTabs.includes(tab)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTabs((prev) => [...prev, tab]);
+                          } else {
+                            setSelectedTabs((prev) => prev.filter((t) => t !== tab));
+                          }
+                        }}
+                        className="h-3.5 w-3.5 text-brand-500 rounded border-slate-300 dark:border-slate-750 bg-white"
+                      />
+                      <span>{tab}</span>
+                    </label>
+                  ))}
+                </div>
+                <span className="block text-[10px] text-slate-400 dark:text-slate-550 leading-normal pt-1">
+                  Only the checked tabs will be visible in the sidebar navigation menu for this user account.
+                </span>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Position / Role</label>
                   <select
                     value={role}
-                    onChange={(e) => setRole(e.target.value as any)}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      setRole(val);
+                      setSelectedTabs(defaultTabsForRole(val));
+                    }}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200"
                   >
                     <option value="Admin">Admin</option>

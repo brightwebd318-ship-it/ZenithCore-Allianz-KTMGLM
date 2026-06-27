@@ -689,6 +689,9 @@ export const dataService = {
   getTenant: async (): Promise<Tenant> => {
     if (isSupabaseConfigured && supabase) {
       const token = await getAuthToken();
+      if (!token) {
+        throw new Error("No active auth token available on client.");
+      }
       return getTenantAction(token);
     } else {
       return getStorageItem('tenant', initialTenant);
@@ -737,6 +740,7 @@ export const dataService = {
   getCurrentUser: async (): Promise<User | null> => {
     if (isSupabaseConfigured && supabase) {
       const token = await getAuthToken();
+      if (!token) return null;
       const data = await getCurrentUserAction(token);
       if (!data) return null;
       return {
@@ -1086,7 +1090,7 @@ export const dataService = {
     attachments: Array<{ name: string; type: string; size: number }> = []
   ): Promise<ClinicalLog> => {
     const tenant = await dataService.getTenant();
-    const currentUser = (await dataService.getUsers())[0]; // Seeded default Admin
+    const currentUser = await dataService.getCurrentUser();
     const totalSize = attachments.reduce((sum, item) => sum + item.size, 0);
 
     const newLog: ClinicalLog = {

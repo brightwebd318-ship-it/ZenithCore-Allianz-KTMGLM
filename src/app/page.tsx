@@ -142,6 +142,29 @@ export default function Home() {
     }
   }, [isAuthenticated, refreshKey]);
 
+  // Redirect to first enabled tab if current active tab is not visible/allowed
+  useEffect(() => {
+    if (currentUser) {
+      const defaultTabsForRole = (role: string) => {
+        if (role === 'Admin') {
+          return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'];
+        } else if (role === 'Senior Therapist') {
+          return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Reports'];
+        } else {
+          return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Billing', 'Inventory'];
+        }
+      };
+
+      const enabledTabs = currentUser.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser.position_role);
+      
+      if (!enabledTabs.includes(activeTab) && activeTab !== 'Administrative Controls') {
+        if (enabledTabs.length > 0) {
+          setActiveTab(enabledTabs[0] as any);
+        }
+      }
+    }
+  }, [currentUser, activeTab]);
+
   const triggerRefresh = () => {
     setRefreshKey((k) => k + 1);
   };
@@ -179,6 +202,7 @@ export default function Home() {
             tenant={tenant}
             setActiveTab={setActiveTab}
             triggerRefreshKey={refreshKey}
+            currentUser={currentUser}
           />
         );
       case 'Patients':
