@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar as CalendarIcon, Clock, Trash2, UserCheck, RefreshCw } from 'lucide-react';
 import { dataService, subscribeToTable } from '../services/dataService';
-import type { ScheduledSession, Patient, User as StaffUser } from '../services/dataService';
+import type { ScheduledSession, Patient, User as StaffUser, Tenant } from '../services/dataService';
 
 interface AppointmentsViewProps {
   triggerRefresh: () => void;
@@ -23,6 +23,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   const [staff, setStaff] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
 
   // Helper to get current YYYY-MM-DD
   const getTodayDateString = () => {
@@ -62,6 +63,9 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
       const st = await dataService.getUsers();
       setStaff(st);
       if (st.length > 0) setStaffId(st[0].id);
+
+      const t = await dataService.getTenant();
+      setTenant(t);
     } catch (err) {
       console.error(err);
     } finally {
@@ -122,7 +126,9 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
       if (isNaN(localStart.getTime())) {
         throw new Error("Invalid start date or time format. Please check your inputs.");
       }
-      const localEnd = new Date(localStart.getTime() + numSessions * 45 * 60 * 1000);
+      
+      const sessionDuration = tenant?.session_duration_minutes || 45;
+      const localEnd = new Date(localStart.getTime() + numSessions * sessionDuration * 60 * 1000);
       const startIso = localStart.toISOString();
       const endIso = localEnd.toISOString();
 

@@ -80,41 +80,46 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 
     try {
       if (isFirstTimeSetup) {
-        if (!supabaseTenantId.trim()) {
-          throw new Error("Supabase Tenant ID is required");
+        if (!tenantId) {
+          throw new Error("No active tenant session found.");
         }
 
-        const targetTenantId = supabaseTenantId.trim();
-
+        // 1. Password update
         if (isSupabaseConfigured && supabase) {
-          const { data: { session } } = await supabase.auth.getSession();
-          const token = session?.access_token || '';
-          await verifyAndLinkTenantAction(token, targetTenantId);
+          const { error: pwdErr } = await supabase.auth.updateUser({ password: adminPassword });
+          if (pwdErr) throw pwdErr;
         } else {
-          // Mock mode completion
-          const mockTenant = {
-            id: targetTenantId,
-            business_name: 'Zenith Core Alliance (Mock)',
-            business_type: 'physiotherapy' as const,
-            subdomain: 'zenithcore',
-            max_db_storage_mb: 50,
-            max_file_storage_mb: 200,
-            clinic_start_time: '08:00',
-            clinic_end_time: '20:00',
-          };
-          localStorage.setItem('tenant', JSON.stringify(mockTenant));
-          
+          // Update password in mock users
+          const users = localStorage.getItem('zenith_users') ? JSON.parse(localStorage.getItem('zenith_users')!) : [];
           const sessionStr = localStorage.getItem('zenith_session');
           if (sessionStr) {
             const session = JSON.parse(sessionStr);
-            const users = localStorage.getItem('zenith_users') ? JSON.parse(localStorage.getItem('zenith_users')!) : [];
             const user = users.find((u: any) => u.email.toLowerCase() === session.email.toLowerCase());
             if (user) {
-              user.tenant_id = targetTenantId;
+              user.password = adminPassword;
+              user.full_name = adminName;
               localStorage.setItem('zenith_users', JSON.stringify(users));
             }
           }
         }
+
+        // 2. Complete Onboarding (update Tenant settings and User name)
+        await dataService.completeOnboarding(tenantId, {
+          business_name: businessName,
+          business_type: businessType,
+          clinic_start_time: startTime,
+          clinic_end_time: endTime,
+          max_db_storage_mb: tier === 'Standard' ? 50 : 250,
+          max_file_storage_mb: tier === 'Standard' ? 200 : 1000,
+          admin_name: adminName,
+        });
+
+        // 3. Save logo brand settings locally
+        localStorage.setItem(`zenith_tenant_logo_${tenantId}`, JSON.stringify({
+          type: logoType,
+          preset: logoPreset,
+          url: logoUrl
+        }));
       } else {
         // Standard full tenant initialization
         const newTenant = await dataService.initializeTenant({
@@ -523,24 +528,22 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         </div>
 
         {/* Steps Indicators */}
-        {!isFirstTimeSetup && (
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-8 py-3 dark:border-slate-800 dark:bg-slate-800/20">
-            <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 1 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
-              <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 1 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>1</span>
-              <span>Clinical Setup</span>
-            </div>
-            <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
-            <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 2 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
-              <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 2 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>2</span>
-              <span>Legal & GST</span>
-            </div>
-            <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
-            <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 3 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
-              <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 3 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>3</span>
-              <span>Admin Creation</span>
-            </div>
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-8 py-3 dark:border-slate-800 dark:bg-slate-800/20">
+          <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 1 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 1 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>1</span>
+            <span>{isFirstTimeSetup ? 'Set Password' : 'Clinical Setup'}</span>
           </div>
-        )}
+          <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
+          <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 2 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 2 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>2</span>
+            <span>{isFirstTimeSetup ? 'Clinic Profile' : 'Legal & GST'}</span>
+          </div>
+          <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
+          <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 3 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 3 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>3</span>
+            <span>{isFirstTimeSetup ? 'Compliance' : 'Admin Creation'}</span>
+          </div>
+        </div>
 
         {/* Error alert */}
         {error && (
@@ -550,9 +553,12 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="p-6">
-          {/* Conditional Step Layout Rendering */}
           {isFirstTimeSetup ? (
-            renderFirstTimeSetup()
+            <>
+              {step === 1 && renderPasswordReset()}
+              {step === 2 && renderClinicalSetup()}
+              {step === 3 && renderLegalGST()}
+            </>
           ) : (
             <>
               {step === 1 && renderClinicalSetup()}

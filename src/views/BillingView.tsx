@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CreditCard, Eye, Plus, FileText, UserCheck } from 'lucide-react';
 import { dataService } from '../services/dataService';
-import type { Invoice, Patient, User as StaffUser } from '../services/dataService';
+import type { Invoice, Patient, User as StaffUser, InventoryItem } from '../services/dataService';
 
 interface BillingViewProps {
   triggerRefresh: () => void;
@@ -25,6 +25,10 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   const [newItemName, setNewItemName] = useState('');
   const [newItemRate, setNewItemRate] = useState(0);
   const [newItemQty, setNewItemQty] = useState(1);
+
+  // Inventory suggestions state
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [selectedInventoryId, setSelectedInventoryId] = useState('custom');
 
   // Selected patient metadata (to show real-time GST status)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -52,6 +56,9 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       if (st.length > 0) {
         setSelectedStaffId(st[0].id);
       }
+
+      const invItems = await dataService.getInventory();
+      setInventory(invItems);
     } catch (err) {
       console.error('Failed to load billing data:', err);
     } finally {
@@ -86,6 +93,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
     setNewItemName('');
     setNewItemRate(0);
     setNewItemQty(1);
+    setSelectedInventoryId('custom');
   };
 
   const handleRemoveCustomItem = (id: string) => {
@@ -228,12 +236,40 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                 
                 <div className="grid grid-cols-12 gap-2">
                   <div className="col-span-6">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Item Name</label>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Select Catalog Item or Type</label>
+                    <select
+                      value={selectedInventoryId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedInventoryId(val);
+                        if (val === 'custom') {
+                          setNewItemName('');
+                          setNewItemRate(0);
+                        } else {
+                          const item = inventory.find(i => i.id === val);
+                          if (item) {
+                            setNewItemName(item.item_name);
+                            setNewItemRate(item.unit_price);
+                          }
+                        }
+                      }}
+                      className="w-full rounded border border-slate-200 px-2 py-0.5 text-[11px] bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 mb-1"
+                    >
+                      <option value="custom">-- Custom/Manual Entry --</option>
+                      {inventory.filter(i => i.sellable_via_invoice).map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.item_name} (₹{item.unit_price})
+                        </option>
+                      ))}
+                    </select>
                     <input
                       type="text"
-                      placeholder="e.g. Latex Gloves / Medicine"
+                      placeholder="Or enter custom item name here..."
                       value={newItemName}
-                      onChange={(e) => setNewItemName(e.target.value)}
+                      onChange={(e) => {
+                        setNewItemName(e.target.value);
+                        setSelectedInventoryId('custom');
+                      }}
                       className="w-full rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                     />
                   </div>

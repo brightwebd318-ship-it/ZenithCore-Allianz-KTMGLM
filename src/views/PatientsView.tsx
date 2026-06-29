@@ -14,7 +14,7 @@ import {
   Eye
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
-import type { Patient, ClinicalLog, User as StaffUser, Invoice } from '../services/dataService';
+import type { Patient, ClinicalLog, User as StaffUser, Invoice, ScheduledSession } from '../services/dataService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface PatientsViewProps {
@@ -32,6 +32,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
   const [revealPersonalData, setRevealPersonalData] = useState(false);
   const [patientInvoices, setPatientInvoices] = useState<Invoice[]>([]);
   const [printableInvoice, setPrintableInvoice] = useState<Invoice | null>(null);
+  const [patientSessions, setPatientSessions] = useState<ScheduledSession[]>([]);
 
   // New Patient Form State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -126,18 +127,23 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
 
   useEffect(() => {
     if (selectedPatient) {
-      const fetchInvoices = async () => {
+      const fetchInvoicesAndSessions = async () => {
         try {
           const invs = await dataService.getInvoices();
-          const filtered = invs.filter((inv) => inv.patient_id === selectedPatient.id);
-          setPatientInvoices(filtered);
+          const filteredInvs = invs.filter((inv) => inv.patient_id === selectedPatient.id);
+          setPatientInvoices(filteredInvs);
+
+          const sess = await dataService.getScheduledSessions();
+          const filteredSess = sess.filter((s) => s.patient_id === selectedPatient.id);
+          setPatientSessions(filteredSess);
         } catch (err) {
-          console.error('Error fetching patient invoices:', err);
+          console.error('Error fetching patient invoices and sessions:', err);
         }
       };
-      fetchInvoices();
+      fetchInvoicesAndSessions();
     } else {
       setPatientInvoices([]);
+      setPatientSessions([]);
     }
   }, [selectedPatient, triggerRefreshKey]);
 
@@ -495,6 +501,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                     </button>
                   )}
 
+
                   {/* GST toggle pill */}
                   <div className="flex items-center space-x-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 dark:bg-slate-800 dark:border-slate-700">
                     <span className="text-[10px] font-bold text-slate-400 uppercase">GST Invoicing</span>
@@ -722,9 +729,15 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
 
             {/* Clinical Logging Timeline */}
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white pb-3 border-b border-slate-100 dark:border-slate-800">
-                Clinical Logs & Progress Timeline
-              </h4>
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Clinical Logs & Progress Timeline
+                </h4>
+                <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-250 dark:border-emerald-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
+                  <span>Total Sessions Completed:</span>
+                  <span className="font-extrabold font-mono text-xs">{patientSessions.filter(s => s.status === 'completed').length}</span>
+                </div>
+              </div>
 
               {currentUser && !isAdmin && !currentUser.can_view_medical_history ? (
                 <div className="flex flex-col items-center justify-center p-8 text-center bg-slate-50 dark:bg-slate-800/20 border border-dashed border-red-200 dark:border-red-900/30 rounded-lg mt-4">

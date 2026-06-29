@@ -5,11 +5,9 @@ import { dataService } from '../services/dataService';
 
 interface LoginViewProps {
   onLoginSuccess: () => void;
-  onOpenOnboarding: () => void;
-  isSystemAdmin?: boolean;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenOnboarding, isSystemAdmin = false }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,11 +21,28 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenOnbo
     try {
       if (isSupabaseConfigured && supabase) {
         // Authenticate with live Supabase Auth
-        const { error: authErr } = await supabase.auth.signInWithPassword({
+        const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password: password,
         });
         if (authErr) throw authErr;
+
+        // Check if the user is active in the database
+        if (authData?.user) {
+          const { data: dbUser, error: dbErr } = await supabase
+            .from('users')
+            .select('resource_fhir')
+            .eq('id', authData.user.id)
+            .single();
+
+          if (!dbErr && dbUser) {
+            if (dbUser.resource_fhir?.active === false) {
+              await supabase.auth.signOut();
+              throw new Error('This account has been deactivated by an administrator.');
+            }
+          }
+        }
+
         try {
           await dataService.addAuditTrail('CONSENT_CHANGED', `User logged in successfully via Supabase Auth: ${email.trim()}`);
         } catch (auditErr) {
@@ -59,6 +74,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenOnbo
             matchedUserId = 'u1111111-1111-1111-1111-111111111111';
           } else if (matchedUser) {
             matchedUserId = matchedUser.id;
+          }
+
+          if (matchedUser && matchedUser.resource_fhir?.active === false) {
+            throw new Error('This account has been deactivated by an administrator.');
           }
 
           if (matchedUserId) {
@@ -190,20 +209,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onOpenOnbo
           </button>
         </form>
 
-        {/* Footer Actions - restricted to system admin */}
-        {isSystemAdmin && (
-          <div className="mt-8 pt-6 border-t border-slate-200/60 dark:border-slate-800/60 text-center">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Clinic tenant not configured yet?
-            </p>
-            <button
-              onClick={onOpenOnboarding}
-              className="mt-1 text-xs font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 transition-colors focus:outline-none cursor-pointer"
-            >
-              Launch Clinic Onboarding Wizard
-            </button>
-          </div>
-        )}
+
 
       </div>
     </div>

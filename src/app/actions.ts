@@ -3,6 +3,21 @@
 import { createServerSupabaseClient, createAdminSupabaseClient } from '../services/serverClient';
 
 // 1. TENANTS
+async function getTenantIdFromToken(supabase: any) {
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !user) throw new Error("No active auth session found");
+
+  const { data: profile, error: profileErr } = await supabase
+    .from('users')
+    .select('tenant_id')
+    .eq('id', user.id)
+    .single();
+  if (profileErr) throw profileErr;
+  if (!profile) throw new Error("No user profile found matching the active session");
+  
+  return profile.tenant_id;
+}
+
 export async function getTenantAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
   
@@ -42,7 +57,8 @@ export async function updateTenantAction(accessToken: string, tenantData: any) {
 // 2. USERS / STAFF
 export async function getUsersAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase.from('users').select('*');
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase.from('users').select('*').eq('tenant_id', tenantId);
   if (error) throw error;
   return data;
 }
@@ -244,7 +260,8 @@ export async function getAuthUsersStatusAction(accessToken: string) {
 // 4. PATIENTS
 export async function getPatientsAction(accessToken: string, searchQuery?: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  let query = supabase.from('patients').select('*');
+  const tenantId = await getTenantIdFromToken(supabase);
+  let query = supabase.from('patients').select('*').eq('tenant_id', tenantId);
   if (searchQuery) {
     query = query.or(
       `resource_fhir->name->0->given->>0.ilike.%${searchQuery}%,resource_fhir->name->0->>family.ilike.%${searchQuery}%,abha_number.ilike.%${searchQuery}%,abha_address.ilike.%${searchQuery}%`
@@ -293,10 +310,12 @@ export async function updatePatientGstAction(accessToken: string, patientId: str
 // 5. CLINICAL LOGS
 export async function getClinicalLogsAction(accessToken: string, patientId: string) {
   const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
   const { data, error } = await supabase
     .from('clinical_logs')
     .select('*')
     .eq('patient_id', patientId)
+    .eq('tenant_id', tenantId)
     .eq('is_deleted', false);
   if (error) throw error;
   return data;
@@ -326,9 +345,11 @@ export async function softDeleteClinicalLogAction(accessToken: string, logId: st
 // 6. INVOICES
 export async function getInvoicesAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
   const { data, error } = await supabase
     .from('invoices')
     .select('*')
+    .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data;
@@ -360,7 +381,8 @@ export async function updateInvoicePaymentStatusAction(accessToken: string, invo
 // 7. INVENTORY
 export async function getInventoryAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase.from('inventory').select('*');
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase.from('inventory').select('*').eq('tenant_id', tenantId);
   if (error) throw error;
   return data;
 }
@@ -391,7 +413,8 @@ export async function updateInventoryStockAction(accessToken: string, itemId: st
 // 8. EXPENSES
 export async function getExpensesAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase.from('expenses').select('*');
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase.from('expenses').select('*').eq('tenant_id', tenantId);
   if (error) throw error;
   return data;
 }
@@ -410,9 +433,11 @@ export async function addExpenseAction(accessToken: string, newExpensePayload: a
 // 9. AUDIT TRAILS
 export async function getAuditTrailsAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
   const { data, error } = await supabase
     .from('system_audit_trails')
     .select('*, performer:performer_id(full_name, email)')
+    .eq('tenant_id', tenantId)
     .order('timestamp', { ascending: false });
   if (error) throw error;
   return data || [];
@@ -438,7 +463,8 @@ export async function truncateAuditTrailsAction(accessToken: string) {
 // 10. TODO TASKS
 export async function getTodoTasksAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase.from('todo_tasks').select('*');
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase.from('todo_tasks').select('*').eq('tenant_id', tenantId);
   if (error) throw error;
   return data;
 }
@@ -469,7 +495,8 @@ export async function updateTodoTaskStatusAction(accessToken: string, taskId: st
 // 11. SCHEDULED SESSIONS
 export async function getScheduledSessionsAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase.from('scheduled_sessions').select('*');
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase.from('scheduled_sessions').select('*').eq('tenant_id', tenantId);
   if (error) throw error;
   return data;
 }

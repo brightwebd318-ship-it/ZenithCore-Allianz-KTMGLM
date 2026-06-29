@@ -15,7 +15,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
-import type { SystemAuditTrail, User as StaffUser } from '../services/dataService';
+import type { SystemAuditTrail, User as StaffUser, Tenant } from '../services/dataService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 
 interface AdminControlsViewProps {
@@ -44,6 +44,7 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [filterAction, setFilterAction] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [tenantSettings, setTenantSettings] = useState<Tenant | null>(null);
 
   const loadAdminData = async () => {
     setLoadingLogs(true);
@@ -56,6 +57,9 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
 
       const metrics = await dataService.getTenantResourceMetrics();
       setQuota(metrics);
+
+      const tenant = await dataService.getTenant();
+      setTenantSettings(tenant);
     } catch (err) {
       console.error('Failed to load admin logs:', err);
     } finally {
@@ -421,8 +425,8 @@ CREATE TABLE scheduled_sessions (
         </div>
       )}
 
-      {/* Storage and System Health Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Storage, Health, and Settings Section */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* Storage Meter Monitor */}
         <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800">
@@ -502,6 +506,54 @@ CREATE TABLE scheduled_sessions (
               <div className="flex justify-between items-center text-xs">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Real-time Session Listeners</span>
                 <span className="font-bold text-brand-600 dark:text-brand-400">ACTIVE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Clinic Default Settings Card */}
+        <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center space-x-2 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <Clock className="h-5 w-5 text-indigo-500" />
+              <h3 className="font-bold text-slate-950 dark:text-white">Clinic Settings</h3>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-450 uppercase mb-1.5 dark:text-slate-450">
+                  Default Session Duration
+                </label>
+                <select
+                  value={tenantSettings?.session_duration_minutes || 45}
+                  onChange={async (e) => {
+                    const newDur = parseInt(e.target.value) || 45;
+                    try {
+                      const updated = await dataService.updateTenant({ session_duration_minutes: newDur });
+                      setTenantSettings(updated);
+                      await dataService.addAuditTrail(
+                        'FINANCIAL_MUTATION',
+                        `Updated clinic default session duration to ${newDur} minutes`
+                      );
+                      alert(`Clinic default session duration updated to ${newDur} minutes.`);
+                    } catch (err: any) {
+                      console.error("Failed to update session duration:", err);
+                      alert("Error updating session duration. If you are using a live database, please ensure you have run the migration:\n\nALTER TABLE tenants ADD COLUMN IF NOT EXISTS session_duration_minutes INT DEFAULT 45;");
+                    }
+                  }}
+                  className="w-full rounded-lg border border-slate-250 dark:border-slate-700 text-xs px-2.5 py-1.5 bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none"
+                >
+                  <option value="15">15 mins</option>
+                  <option value="30">30 mins</option>
+                  <option value="45">45 mins</option>
+                  <option value="60">60 mins</option>
+                  <option value="75">75 mins</option>
+                  <option value="90">90 mins</option>
+                  <option value="120">120 mins</option>
+                </select>
+                <p className="text-[10px] text-slate-450 mt-2">
+                  Used globally to calculate total time worked from scheduled session counts.
+                </p>
               </div>
             </div>
           </div>

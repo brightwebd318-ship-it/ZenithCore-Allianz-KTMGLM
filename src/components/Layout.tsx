@@ -43,14 +43,12 @@ interface LayoutProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   tenant: Tenant | null;
-  onOpenOnboarding: () => void;
-  onLogout?: () => void;
-  isSystemAdmin?: boolean;
+  onLogout: () => void;
   darkMode: boolean;
-  setDarkMode: (val: boolean) => void;
+  setDarkMode: (dark: boolean) => void;
   currentUser: User | null;
-  onNavigateToTask?: (taskId: string) => void;
-  onNavigateToAppointment?: (appointmentId: string) => void;
+  onNavigateToTask?: (id: string) => void;
+  onNavigateToAppointment?: (id: string) => void;
 }
 
 export const Layout: React.FC<LayoutProps> = ({
@@ -58,9 +56,7 @@ export const Layout: React.FC<LayoutProps> = ({
   activeTab,
   setActiveTab,
   tenant,
-  onOpenOnboarding,
   onLogout,
-  isSystemAdmin = false,
   darkMode,
   setDarkMode,
   currentUser,
@@ -255,16 +251,6 @@ export const Layout: React.FC<LayoutProps> = ({
 
         {/* Lower Left Actions */}
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-3 bg-slate-50/30 dark:bg-[#111827]/50">
-          {/* Quick onboarding button - restricted to system admin */}
-          {isSystemAdmin && (
-            <button
-              onClick={onOpenOnboarding}
-              className="w-full flex items-center justify-center px-3 py-2 border border-brand-500/30 text-brand-600 dark:text-brand-400 bg-brand-50/30 dark:bg-brand-950/10 hover:bg-brand-50 dark:hover:bg-brand-950/20 text-xs font-bold rounded-lg transition-all"
-            >
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Onboard New Tenant
-            </button>
-          )}
 
           {/* Dark / Light Toggle Switch */}
           <div className="flex items-center justify-between">
@@ -388,18 +374,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   </div>
                   
                   <div className="p-1">
-                    {isSystemAdmin && (
-                      <button
-                        onClick={() => {
-                          setProfileOpen(false);
-                          onOpenOnboarding();
-                        }}
-                        className="w-full text-left flex items-center px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        <PlusCircle className="h-4 w-4 mr-2 text-slate-400" />
-                        Add Another Tenant
-                      </button>
-                    )}
+
                     <button
                       onClick={() => {
                         setProfileOpen(false);

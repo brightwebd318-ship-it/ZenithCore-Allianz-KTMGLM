@@ -28,7 +28,6 @@ export default function Home() {
   // Authentication States
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [isSystemAdmin, setIsSystemAdmin] = useState(false);
   const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -66,10 +65,6 @@ export default function Home() {
 
   // Check session on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      setIsSystemAdmin(params.get('setup') === 'true' || params.get('superadmin') === 'true');
-    }
     if (isSupabaseConfigured && supabase) {
       // Fetch current session
       supabase.auth.getSession()
@@ -116,6 +111,11 @@ export default function Home() {
       setTenant(data);
 
       const userProfile = await dataService.getCurrentUser();
+      if (userProfile && userProfile.resource_fhir?.active === false) {
+        alert("Your account has been deactivated by an administrator.");
+        handleLogout();
+        return;
+      }
       setCurrentUser(userProfile);
 
       if (data && data.business_name === 'Pending Setup') {
@@ -126,13 +126,8 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Failed to retrieve tenant settings:', err);
-      // Auto-trigger onboarding if database is empty/not setup and user is system admin
-      if (isSystemAdmin) {
-        setOnboardingOpen(true);
-      } else {
-        // If not system admin, clear the active session so the user goes back to a clean login screen
-        handleLogout();
-      }
+      // If tenant retrieval fails, clear the active session so the user goes back to a clean login screen
+      handleLogout();
     }
   };
 
@@ -302,8 +297,6 @@ export default function Home() {
             setIsAuthenticated(true);
             triggerRefresh();
           }}
-          onOpenOnboarding={() => setOnboardingOpen(true)}
-          isSystemAdmin={isSystemAdmin}
         />
         <OnboardingWizard
           isOpen={onboardingOpen}
@@ -324,9 +317,7 @@ export default function Home() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         tenant={tenant}
-        onOpenOnboarding={() => setOnboardingOpen(true)}
         onLogout={handleLogout}
-        isSystemAdmin={isSystemAdmin}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         currentUser={currentUser}

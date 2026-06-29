@@ -71,6 +71,7 @@ export interface Tenant {
   clinic_start_time: string;
   clinic_end_time: string;
   bonus_threshold_hours?: number;
+  session_duration_minutes?: number;
 }
 
 export interface User {
@@ -259,6 +260,7 @@ const initialTenant: Tenant = {
   clinic_start_time: '08:00',
   clinic_end_time: '20:00',
   bonus_threshold_hours: 100,
+  session_duration_minutes: 45,
 };
 
 const initialUsers: User[] = [
@@ -1071,6 +1073,23 @@ export const dataService = {
       const idx = patients.findIndex((p) => p.id === patientId);
       if (idx !== -1) {
         patients[idx] = { ...patients[idx], ...updates };
+        setStorageItem('patients', patients);
+        return patients[idx];
+      }
+      throw new Error('Patient not found');
+    }
+  },
+
+  updatePatientResource: async (patientId: string, resourceFhir: any): Promise<Patient> => {
+    const updates = { resource_fhir: resourceFhir };
+    if (isSupabaseConfigured && supabase) {
+      const token = await getAuthToken();
+      return updatePatientConsentAction(token, patientId, updates);
+    } else {
+      const patients = getStorageItem('patients', initialPatients);
+      const idx = patients.findIndex((p) => p.id === patientId);
+      if (idx !== -1) {
+        patients[idx] = { ...patients[idx], resource_fhir: resourceFhir };
         setStorageItem('patients', patients);
         return patients[idx];
       }
