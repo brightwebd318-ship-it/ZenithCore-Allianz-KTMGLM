@@ -567,20 +567,19 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             </>
           )}
 
-          {/* Footer Actions */}
-          <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="mt-8 flex items-center justify-between border-t border-slate-100 pt-6 dark:border-slate-800">
             <div>
-              {!isFirstTimeSetup && step > 1 && (
+              {step > 1 && (
                 <button
                   type="button"
                   onClick={() => setStep((s) => s - 1)}
-                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-850 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
                 >
                   Back
                 </button>
               )}
             </div>
-            
+
             <div className="flex space-x-2">
               {!isFirstTimeSetup && (
                 <button
@@ -592,15 +591,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                 </button>
               )}
 
-              {isFirstTimeSetup ? (
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors cursor-pointer"
-                >
-                  {loading ? 'Verifying Workspace...' : 'Link & Initialize'}
-                </button>
-              ) : step < 3 ? (
+              {step < 3 ? (
                 <button
                   type="button"
                   onClick={() => setStep((s) => s + 1)}
