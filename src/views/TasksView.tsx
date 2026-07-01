@@ -345,7 +345,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       />
                     </div>
                     {task.description && (
-                      <p className="text-[11px] text-slate-400 dark:text-slate-550 leading-relaxed line-through">{task.description}</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed line-through">{task.description}</p>
                     )}
                     
                     <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-[9px] text-slate-450 dark:text-slate-450">

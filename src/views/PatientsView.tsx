@@ -677,7 +677,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                               <span className="font-bold font-mono text-sm text-slate-900 dark:text-white">
                                 {identifier}
                               </span>
-                              <span className="text-[10px] text-slate-400 dark:text-slate-550">
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500">
                                 {formattedDate}
                               </span>
                             </div>
@@ -733,7 +733,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                   Clinical Logs & Progress Timeline
                 </h4>
-                <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-250 dark:border-emerald-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
+                <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
                   <span>Total Sessions Completed:</span>
                   <span className="font-extrabold font-mono text-xs">{patientSessions.filter(s => s.status === 'completed').length}</span>
                 </div>
@@ -1080,10 +1080,10 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
             }
           `}</style>
 
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden dark:bg-slate-900 dark:border-slate-850 no-print">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden dark:bg-slate-900 dark:border-slate-850">
             
             {/* Top Bar for Actions (Screen Only) */}
-            <div className="bg-slate-100 border-b border-slate-200 px-6 py-4 flex justify-between items-center dark:bg-slate-800 dark:border-slate-700">
+            <div className="bg-slate-100 border-b border-slate-200 px-6 py-4 flex justify-between items-center dark:bg-slate-800 dark:border-slate-700 no-print">
               <span className="font-extrabold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Receipt Document Viewer
               </span>
@@ -1193,12 +1193,9 @@ Thank you for choosing Zenith Ortho-Rehab Care!
                   </div>
                   
                   <div>
-                    <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 font-mono">Billed From (Practitioner)</h4>
+                    <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-1.5 font-mono">Billed by</h4>
                     <p className="font-bold text-slate-800 dark:text-slate-100">
                       {staffList.find(s => s.id === printableInvoice.associated_practitioner_id)?.full_name || 'Clinic Specialist'}
-                    </p>
-                    <p className="text-slate-500 dark:text-slate-400 text-[10px] mt-0.5 font-mono">
-                      {staffList.find(s => s.id === printableInvoice.associated_practitioner_id)?.position_role || 'Therapist'}
                     </p>
                   </div>
                 </div>

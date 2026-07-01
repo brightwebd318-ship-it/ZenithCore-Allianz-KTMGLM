@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { UserCheck, Shield, Plus, Edit2, Trash2 } from 'lucide-react';
+import { UserCheck, Shield, Plus, Edit2, Trash2, MoreVertical, Settings } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { User as StaffUser } from '../services/dataService';
 
@@ -30,9 +30,20 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [loginPassword, setLoginPassword] = useState('');
   const [selectedTabs, setSelectedTabs] = useState<string[]>(['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Reports']);
 
+  // Mobile, Aadhaar, Address, and Emergency Contact State hooks
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [address, setAddress] = useState('');
+  const [aadhaar, setAadhaar] = useState('');
+  const [primaryContactName, setPrimaryContactName] = useState('');
+  const [primaryContactPhone, setPrimaryContactPhone] = useState('');
+
   // Existing staff account creation prompt modal
   const [promptPasswordUser, setPromptPasswordUser] = useState<StaffUser | null>(null);
   const [promptPasswordText, setPromptPasswordText] = useState('');
+
+  // Dropdown & Modal states
+  const [openDropdownStaffId, setOpenDropdownStaffId] = useState<string | null>(null);
+  const [securityModalUser, setSecurityModalUser] = useState<StaffUser | null>(null);
 
   // Edit Staff member form
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
@@ -42,6 +53,13 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [editMedNo, setEditMedNo] = useState('');
   const [editBaseSalary, setEditBaseSalary] = useState(45000);
   const [editBonusEnabled, setEditBonusEnabled] = useState(true);
+
+  // Edit Mobile, Aadhaar, Address, and Emergency Contact State hooks
+  const [editMobileNumber, setEditMobileNumber] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editAadhaar, setEditAadhaar] = useState('');
+  const [editPrimaryContactName, setEditPrimaryContactName] = useState('');
+  const [editPrimaryContactPhone, setEditPrimaryContactPhone] = useState('');
 
   const loadStaffData = async () => {
     try {
@@ -205,6 +223,11 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
           active: true,
           name: [{ text: fullName }],
           enabled_tabs: selectedTabs,
+          mobile: mobileNumber,
+          address: address,
+          aadhaar: aadhaar,
+          primary_contact_name: primaryContactName,
+          primary_contact_phone: primaryContactPhone,
         },
       });
 
@@ -236,6 +259,11 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
       setCreateLoginAccount(false);
       setLoginPassword('');
       setShowAddForm(false);
+      setMobileNumber('');
+      setAddress('');
+      setAadhaar('');
+      setPrimaryContactName('');
+      setPrimaryContactPhone('');
       
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Added new staff directory profile: ${fullName}`);
       
@@ -263,6 +291,14 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
     setEditMedNo(user.medical_council_registration_no || '');
     setEditBaseSalary(user.base_salary_monthly || 0);
     setEditBonusEnabled(!!user.bonus_system_enabled);
+
+    // Read details from user profile JSON
+    const fhir = user.resource_fhir || {};
+    setEditMobileNumber(fhir.mobile || '');
+    setEditAddress(fhir.address || '');
+    setEditAadhaar(fhir.aadhaar || '');
+    setEditPrimaryContactName(fhir.primary_contact_name || '');
+    setEditPrimaryContactPhone(fhir.primary_contact_phone || '');
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -270,6 +306,16 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
     if (!editingUser) return;
 
     try {
+      const updatedResource = {
+        ...(editingUser.resource_fhir || {}),
+        name: [{ text: editFullName }],
+        mobile: editMobileNumber,
+        address: editAddress,
+        aadhaar: editAadhaar,
+        primary_contact_name: editPrimaryContactName,
+        primary_contact_phone: editPrimaryContactPhone,
+      };
+
       await dataService.updateUserPermissions(editingUser.id, {
         full_name: editFullName,
         email: editEmail,
@@ -277,6 +323,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
         medical_council_registration_no: editMedNo,
         base_salary_monthly: editBaseSalary,
         bonus_system_enabled: editBonusEnabled,
+        resource_fhir: updatedResource,
       });
       await dataService.addAuditTrail('CONSENT_CHANGED', `Admin edited staff profile details for: ${editFullName}`);
       setEditingUser(null);
@@ -316,7 +363,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs ${
                 isActive
                   ? 'bg-brand-500 text-white shadow-sm'
-                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-250 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-350 dark:hover:bg-slate-750'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-350 dark:hover:bg-slate-750'
               }`}
             >
               {filter}
@@ -372,7 +419,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                 >
                   <div>
                     {/* User Header Profile */}
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between relative">
                       <div className="flex items-center space-x-3.5">
                         <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                           {user.full_name[0]}
@@ -405,7 +452,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                                   );
                               }
                               return (
-                                <span className="text-[10px] bg-emerald-50 border border-emerald-150 rounded px-1.5 py-0.5 font-bold text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900/50 dark:text-emerald-400">
+                                <span className="text-[10px] bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 font-bold text-emerald-600 dark:bg-emerald-950/20 dark:border-emerald-900/50 dark:text-emerald-400">
                                   Active Account
                                 </span>
                               );
@@ -413,6 +460,135 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                           </div>
                         </div>
                       </div>
+
+                      {/* Dropdown Options Button */}
+                      {canManageStaff && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setOpenDropdownStaffId(openDropdownStaffId === user.id ? null : user.id)}
+                            className="p-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 transition-colors dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="Staff options"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+
+                          {openDropdownStaffId === user.id && (
+                            <div className="absolute right-0 mt-1.5 w-44 rounded-lg border border-slate-200 bg-white shadow-xl py-1 z-20 dark:bg-slate-950 dark:border-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-350">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleStartEdit(user);
+                                  setOpenDropdownStaffId(null);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center space-x-1.5"
+                              >
+                                <Edit2 className="h-3 w-3 text-brand-500" />
+                                <span>Edit Profile Details</span>
+                              </button>
+
+                              {/* Only visible to Admin */}
+                              {currentUser?.position_role === 'Admin' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSecurityModalUser(user);
+                                    setOpenDropdownStaffId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center space-x-1.5"
+                                >
+                                  <Shield className="h-3 w-3 text-indigo-500" />
+                                  <span>Access & Security</span>
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleToggleActive(user.id);
+                                  setOpenDropdownStaffId(null);
+                                }}
+                                className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center space-x-1.5"
+                              >
+                                <span>{isActiveVal ? '🚫 Mark Inactive' : '✅ Mark Active'}</span>
+                              </button>
+
+                              {isActiveVal && (() => {
+                                const status = authStatuses.find(s => s.id === user.id);
+                                if (!status || !status.exists) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setPromptPasswordUser(user);
+                                        setPromptPasswordText('');
+                                        setOpenDropdownStaffId(null);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center space-x-1.5"
+                                    >
+                                      <span>🔑 Create Account</span>
+                                    </button>
+                                  );
+                                }
+                                if (status.paused) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        setOpenDropdownStaffId(null);
+                                        try {
+                                          await dataService.pauseStaffAuthUser(user.id, false);
+                                          await dataService.addAuditTrail('CONSENT_CHANGED', `Resumed/reactivated login access for staff: ${user.full_name}`);
+                                          triggerRefresh();
+                                        } catch (err: any) {
+                                          alert(err?.message || "Failed to resume account.");
+                                        }
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center space-x-1.5"
+                                    >
+                                      <span>▶️ Resume Account</span>
+                                    </button>
+                                  );
+                                }
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      setOpenDropdownStaffId(null);
+                                      try {
+                                        await dataService.pauseStaffAuthUser(user.id, true);
+                                        await dataService.addAuditTrail('CONSENT_CHANGED', `Suspended/paused login access for staff: ${user.full_name}`);
+                                        triggerRefresh();
+                                      } catch (err: any) {
+                                        alert(err?.message || "Failed to pause account.");
+                                      }
+                                    }}
+                                    className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center space-x-1.5"
+                                  >
+                                    <span>⏸️ Pause Account</span>
+                                  </button>
+                                );
+                              })()}
+
+                              {/* Only visible to Admin */}
+                              {currentUser?.position_role === 'Admin' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleDeleteStaff(user.id, user.full_name);
+                                    setOpenDropdownStaffId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-655 dark:text-red-400 dark:hover:bg-red-950/20 border-t border-slate-105 dark:border-slate-800 flex items-center space-x-1.5 mt-1 pt-1.5 font-bold"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                  <span>Delete Account</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                       
                       {user.medical_council_registration_no && (
                         <span className="text-[9px] font-mono text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded dark:border-slate-800" title="Medical Registration Number">
@@ -423,224 +599,25 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
 
                     <div className="mt-4 space-y-1 text-xs text-slate-500 dark:text-slate-400">
                       <p>Email: <strong className="text-slate-700 dark:text-slate-300">{user.email}</strong></p>
+                      {user.resource_fhir?.mobile && (
+                        <p>Mobile: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.mobile}</strong></p>
+                      )}
+                      {user.resource_fhir?.aadhaar && (
+                        <p>Aadhaar: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.aadhaar}</strong></p>
+                      )}
+                      {user.resource_fhir?.address && (
+                        <p>Address: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.address}</strong></p>
+                      )}
+                      {user.resource_fhir?.primary_contact_name && (
+                        <p>Primary Contact: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.primary_contact_name} ({user.resource_fhir.primary_contact_phone || 'No phone'})</strong></p>
+                      )}
                       <p>Base Salary: <strong className="text-slate-700 dark:text-slate-300">₹{user.base_salary_monthly.toLocaleString('en-IN')}/mo</strong></p>
                       <p>Session Bonus: <strong className="text-slate-700 dark:text-slate-300">{user.bonus_system_enabled ? 'Enabled' : 'Disabled'}</strong></p>
                     </div>
-
-                    {canManageStaff && (
-                      <div className="space-y-1.5 mt-4">
-                        <button
-                          onClick={() => handleStartEdit(user)}
-                          className="w-full bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1"
-                        >
-                          <Edit2 className="h-3.5 w-3.5 text-brand-500" />
-                          <span>Edit Profile Details</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleToggleActive(user.id)}
-                          className={`w-full border rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 ${
-                            isActiveVal
-                              ? 'bg-slate-50 border-slate-200 text-slate-750 hover:bg-slate-100 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
-                              : 'bg-emerald-50 border-emerald-250 text-emerald-755 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/60'
-                          }`}
-                        >
-                          <span>{isActiveVal ? '🚫 Mark Inactive' : '✅ Mark Active'}</span>
-                        </button>
-                        
-                        {isActiveVal && currentUser?.position_role === 'Admin' && (() => {
-                          const status = authStatuses.find(s => s.id === user.id);
-                          if (!status || !status.exists) {
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setPromptPasswordUser(user);
-                                  setPromptPasswordText('');
-                                }}
-                                className="w-full bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-blue-950/20 dark:border-blue-900/40 dark:text-blue-400 dark:hover:bg-blue-900/60"
-                              >
-                                <span>🔑 Create Account</span>
-                              </button>
-                            );
-                          }
-                          if (status.paused) {
-                            return (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  try {
-                                    await dataService.pauseStaffAuthUser(user.id, false);
-                                    await dataService.addAuditTrail('CONSENT_CHANGED', `Resumed/reactivated login access for staff: ${user.full_name}`);
-                                    triggerRefresh();
-                                  } catch (err: any) {
-                                    alert(err?.message || "Failed to resume account.");
-                                  }
-                                }}
-                                className="w-full bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400 dark:hover:bg-emerald-900/60"
-                              >
-                                <span>▶️ Resume Account</span>
-                              </button>
-                            );
-                          }
-                          return (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                try {
-                                  await dataService.pauseStaffAuthUser(user.id, true);
-                                  await dataService.addAuditTrail('CONSENT_CHANGED', `Suspended/paused login access for staff: ${user.full_name}`);
-                                  triggerRefresh();
-                                } catch (err: any) {
-                                  alert(err?.message || "Failed to pause account.");
-                                }
-                              }}
-                              className="w-full bg-orange-50 hover:bg-orange-150 border border-orange-250 text-orange-705 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-orange-950/20 dark:border-orange-900/40 dark:text-orange-400 dark:hover:bg-orange-900/60"
-                            >
-                              <span>⏸️ Pause Account</span>
-                            </button>
-                          );
-                        })()}
-
-                        {currentUser?.position_role === 'Admin' && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteStaff(user.id, user.full_name)}
-                            className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-750 rounded-lg py-1.5 text-[11px] font-bold transition-all flex items-center justify-center space-x-1 dark:bg-red-950/20 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-900/60"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span>Delete Account</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
-
-                {/* Security Flags Toggle Matrix */}
-                <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-500 mb-2">
-                    <Shield className="h-4 w-4 text-brand-500" />
-                    <span>Access & Security Matrix</span>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    
-                    {/* can_view_personal_data */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Read Personal Data</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_view_personal_data')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_view_personal_data ? 'bg-brand-500' : 'bg-slate-250 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_view_personal_data ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
-
-                    {/* can_view_medical_history */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Read Medical Logs</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_view_medical_history')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_view_medical_history ? 'bg-brand-500' : 'bg-slate-250 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_view_medical_history ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
-
-                    {/* can_manage_finance */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Financial Data</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_manage_finance')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_manage_finance ? 'bg-brand-500' : 'bg-slate-250 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_manage_finance ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
-
-                    {/* can_print_generate_invoice */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Generate Invoices</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_print_generate_invoice')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_print_generate_invoice ? 'bg-brand-500' : 'bg-slate-250 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_print_generate_invoice ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
-
-                    {/* can_manage_staff */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Staff & Clearances</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_manage_staff')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_manage_staff ? 'bg-brand-500' : 'bg-slate-250 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_manage_staff ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
-
-                    {/* Tab Navigation Access Matrix */}
-                    <div className="mt-4 pt-3 border-t border-dashed border-slate-150 dark:border-slate-800 space-y-2">
-                      <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Navigation Tabs Visibility</span>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-1">
-                        {['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'].map((tab) => {
-                          const currentResource = user.resource_fhir || {};
-                          const currentTabs: string[] = currentResource.enabled_tabs || defaultTabsForRole(user.position_role);
-                          const isTabEnabled = currentTabs.includes(tab);
-
-                          return (
-                            <div key={tab} className="flex justify-between items-center text-[11px]">
-                              <span className="text-slate-550 dark:text-slate-400 font-semibold">{tab}</span>
-                              <button
-                                onClick={() => handleToggleTab(user.id, tab)}
-                                className={`relative inline-flex h-3.5 w-7 items-center rounded-full transition-colors focus:outline-none ${
-                                  !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                                } ${
-                                  isTabEnabled ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
-                                }`}
-                                disabled={!canManageStaff}
-                              >
-                                <span className={`${isTabEnabled ? 'translate-x-3.5' : 'translate-x-0.5'} inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform`} />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-              </div>
-              );
-            });
-          })()
+                );
+              });
+            })()
         )}
       </div>
 
@@ -676,6 +653,68 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                   className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                   placeholder="ananya@zenithcore.com"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mobile Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. +91 98765 43210"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Aadhaar Card Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={aadhaar}
+                    onChange={(e) => setAadhaar(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. 1234-5678-9012"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Residential Address</label>
+                <textarea
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                  placeholder="e.g. Flat 101, Residency Layout, Mumbai"
+                  rows={2}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Primary Emergency Contact Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={primaryContactName}
+                    onChange={(e) => setPrimaryContactName(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. Spouse/Parent Name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Primary Emergency Contact Phone</label>
+                  <input
+                    type="text"
+                    required
+                    value={primaryContactPhone}
+                    onChange={(e) => setPrimaryContactPhone(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. +91 99999 88888"
+                  />
+                </div>
               </div>
 
               <div className="border border-slate-150 dark:border-slate-800 rounded-lg p-3.5 bg-slate-50 dark:bg-slate-900/40 space-y-3.5">
@@ -862,6 +901,68 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mobile Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={editMobileNumber}
+                    onChange={(e) => setEditMobileNumber(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. +91 98765 43210"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Aadhaar Card Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={editAadhaar}
+                    onChange={(e) => setEditAadhaar(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. 1234-5678-9012"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Residential Address</label>
+                <textarea
+                  required
+                  value={editAddress}
+                  onChange={(e) => setEditAddress(e.target.value)}
+                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                  placeholder="e.g. Flat 101, Residency Layout, Mumbai"
+                  rows={2}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Primary Emergency Contact Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPrimaryContactName}
+                    onChange={(e) => setEditPrimaryContactName(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. Spouse/Parent Name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Primary Emergency Contact Phone</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPrimaryContactPhone}
+                    onChange={(e) => setEditPrimaryContactPhone(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="e.g. +91 99999 88888"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Position / Role</label>
                   <select
                     value={editRole}
@@ -1009,6 +1110,157 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
         </div>
       )}
 
+      {/* Access & Security Modal (Admin Only) */}
+      {securityModalUser && (() => {
+        const user = staffList.find(u => u.id === securityModalUser.id) || securityModalUser;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in max-h-[85vh] flex flex-col">
+              <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+                <div className="flex items-center space-x-2">
+                  <Shield className="h-5 w-5" />
+                  <h3 className="font-bold text-sm">Access & Security Settings</h3>
+                </div>
+                <button onClick={() => setSecurityModalUser(null)} className="text-white/85 hover:text-white text-xs font-semibold">Close</button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto space-y-5">
+                <div>
+                  <h4 className="font-bold text-slate-850 dark:text-white text-sm">{user.full_name}</h4>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold tracking-wider mt-0.5">{user.position_role} Permissions</p>
+                </div>
+
+                {/* Access & Security Matrix */}
+                <div className="space-y-3">
+                  <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Access & Security Matrix</span>
+                  <div className="space-y-2.5 bg-slate-50 dark:bg-slate-850 rounded-xl p-3.5 border border-slate-100 dark:border-slate-800">
+                    
+                    {/* can_view_personal_data */}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Read Personal Data</span>
+                      <button
+                        onClick={() => handleToggleFlag(user.id, 'can_view_personal_data')}
+                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
+                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
+                          user.can_view_personal_data ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
+                        }`}
+                        disabled={!canManageStaff}
+                      >
+                        <span className={`${user.can_view_personal_data ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                      </button>
+                    </div>
+
+                    {/* can_view_medical_history */}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Read Medical Logs</span>
+                      <button
+                        onClick={() => handleToggleFlag(user.id, 'can_view_medical_history')}
+                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
+                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
+                          user.can_view_medical_history ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
+                        }`}
+                        disabled={!canManageStaff}
+                      >
+                        <span className={`${user.can_view_medical_history ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                      </button>
+                    </div>
+
+                    {/* can_manage_finance */}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Financial Data</span>
+                      <button
+                        onClick={() => handleToggleFlag(user.id, 'can_manage_finance')}
+                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
+                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
+                          user.can_manage_finance ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
+                        }`}
+                        disabled={!canManageStaff}
+                      >
+                        <span className={`${user.can_manage_finance ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                      </button>
+                    </div>
+
+                    {/* can_print_generate_invoice */}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Generate Invoices</span>
+                      <button
+                        onClick={() => handleToggleFlag(user.id, 'can_print_generate_invoice')}
+                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
+                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
+                          user.can_print_generate_invoice ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
+                        }`}
+                        disabled={!canManageStaff}
+                      >
+                        <span className={`${user.can_print_generate_invoice ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                      </button>
+                    </div>
+
+                    {/* can_manage_staff */}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Staff & Clearances</span>
+                      <button
+                        onClick={() => handleToggleFlag(user.id, 'can_manage_staff')}
+                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
+                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                        } ${
+                          user.can_manage_staff ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
+                        }`}
+                        disabled={!canManageStaff}
+                      >
+                        <span className={`${user.can_manage_staff ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tab Navigation Access Matrix */}
+                <div className="space-y-3">
+                  <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Navigation Tabs Visibility</span>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 bg-slate-50 dark:bg-slate-850 rounded-xl p-3.5 border border-slate-100 dark:border-slate-800">
+                    {['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'].map((tab) => {
+                      const currentResource = user.resource_fhir || {};
+                      const currentTabs: string[] = currentResource.enabled_tabs || defaultTabsForRole(user.position_role);
+                      const isTabEnabled = currentTabs.includes(tab);
+
+                      return (
+                        <div key={tab} className="flex justify-between items-center text-[11px]">
+                          <span className="text-slate-600 dark:text-slate-400 font-medium">{tab}</span>
+                          <button
+                            onClick={() => handleToggleTab(user.id, tab)}
+                            className={`relative inline-flex h-3.5 w-7 items-center rounded-full transition-colors focus:outline-none ${
+                              !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${
+                              isTabEnabled ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'
+                            }`}
+                            disabled={!canManageStaff}
+                          >
+                            <span className={`${isTabEnabled ? 'translate-x-3.5' : 'translate-x-0.5'} inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform`} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end p-6 border-t border-slate-100 dark:border-slate-800 flex-shrink-0 bg-slate-50 dark:bg-slate-900/40">
+                <button
+                  type="button"
+                  onClick={() => setSecurityModalUser(null)}
+                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-bold shadow"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      
     </div>
   );
 };

@@ -41,6 +41,8 @@ import {
   initializeTenantAction,
   completeOnboardingAction,
   deleteStaffAction,
+  deleteExpenseAction,
+  updateExpenseAction,
 } from '../app/actions';
 
 const getAuthToken = async (): Promise<string> => {
@@ -151,6 +153,7 @@ export interface BusinessExpense {
   category: 'Salaries' | 'Rent' | 'Supplies' | 'Utilities' | 'Other';
   expense_date: string;
   attachment_size_bytes: number;
+  bill_attachments?: any;
 }
 
 export interface SystemAuditTrail {
@@ -1337,6 +1340,7 @@ export const dataService = {
           category: row.category,
           expense_date: row.expense_date,
           attachment_size_bytes: Number(row.attachment_size_bytes || 0),
+          bill_attachments: row.bill_attachments || [],
         }));
       } catch (err) {
         console.warn("Error in getExpenses, falling back to LocalStorage:", err);
@@ -1356,6 +1360,7 @@ export const dataService = {
       category: expense.category,
       expense_date: expense.expense_date,
       attachment_size_bytes: expense.attachment_size_bytes,
+      bill_attachments: expense.bill_attachments || [],
     };
 
     if (isSupabaseConfigured && supabase) {
@@ -1384,6 +1389,7 @@ export const dataService = {
           category: data.category,
           expense_date: data.expense_date,
           attachment_size_bytes: Number(data.attachment_size_bytes || 0),
+          bill_attachments: data.bill_attachments || [],
         };
       } catch (err) {
         console.warn("Error inserting expense to Supabase, falling back to LocalStorage:", err);
@@ -1405,6 +1411,71 @@ export const dataService = {
       expenses.push(mockExpense);
       setStorageItem('expenses', expenses);
       return mockExpense;
+    }
+  },
+
+  deleteExpense: async (expenseId: string): Promise<boolean> => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const token = await getAuthToken();
+        await deleteExpenseAction(token, expenseId);
+        return true;
+      } catch (err) {
+        console.warn("Error deleting expense in Supabase, falling back to LocalStorage:", err);
+        const expenses = getStorageItem('expenses', initialExpenses);
+        const filtered = expenses.filter((e: any) => e.id !== expenseId);
+        setStorageItem('expenses', filtered);
+        return true;
+      }
+    } else {
+      const expenses = getStorageItem('expenses', initialExpenses);
+      const filtered = expenses.filter((e: any) => e.id !== expenseId);
+      setStorageItem('expenses', filtered);
+      return true;
+    }
+  },
+
+  updateExpense: async (expenseId: string, updates: Partial<BusinessExpense>): Promise<BusinessExpense> => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const token = await getAuthToken();
+        const dbUpdates: any = {};
+        if (updates.expense_name !== undefined) dbUpdates.description = updates.expense_name;
+        if (updates.amount !== undefined) dbUpdates.amount = updates.amount;
+        if (updates.category !== undefined) dbUpdates.category = updates.category;
+        if (updates.expense_date !== undefined) dbUpdates.expense_date = updates.expense_date;
+        if (updates.attachment_size_bytes !== undefined) dbUpdates.attachment_size_bytes = updates.attachment_size_bytes;
+        if (updates.bill_attachments !== undefined) dbUpdates.bill_attachments = updates.bill_attachments;
+
+        const data = await updateExpenseAction(token, expenseId, dbUpdates);
+        return {
+          id: data.id,
+          tenant_id: data.tenant_id,
+          expense_name: data.description || data.expense_name || '',
+          amount: Number(data.amount),
+          category: data.category,
+          expense_date: data.expense_date,
+          attachment_size_bytes: Number(data.attachment_size_bytes || 0),
+          bill_attachments: data.bill_attachments || [],
+        };
+      } catch (err) {
+        console.warn("Error updating expense in Supabase, falling back to LocalStorage:", err);
+        const expenses = getStorageItem('expenses', initialExpenses);
+        const idx = expenses.findIndex((e: any) => e.id === expenseId);
+        if (idx !== -1) {
+          expenses[idx] = { ...expenses[idx], ...updates };
+          setStorageItem('expenses', expenses);
+        }
+        return expenses.find((e: any) => e.id === expenseId) || (updates as any);
+      }
+    } else {
+      const expenses = getStorageItem('expenses', initialExpenses);
+      const idx = expenses.findIndex((e: any) => e.id === expenseId);
+      if (idx !== -1) {
+        expenses[idx] = { ...expenses[idx], ...updates };
+        setStorageItem('expenses', expenses);
+      }
+      return expenses.find((e: any) => e.id === expenseId) || (updates as any);
     }
   },
 

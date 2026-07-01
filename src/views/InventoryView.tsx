@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Package, Plus, ToggleLeft, ToggleRight, FileText, Paperclip } from 'lucide-react';
+import { Package, Plus, ToggleLeft, ToggleRight, FileText, Paperclip, Edit2, Trash2 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { InventoryItem, BusinessExpense } from '../services/dataService';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface InventoryViewProps {
   triggerRefresh: () => void;
@@ -27,8 +28,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
-  const [expAttachName, setExpAttachName] = useState('');
-  const [expAttachSize, setExpAttachSize] = useState('250000'); // Default 250KB
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // Editing Expense states
+  const [editingExpense, setEditingExpense] = useState<BusinessExpense | null>(null);
+  const [editExpName, setEditExpName] = useState('');
+  const [editExpCategory, setEditExpCategory] = useState<'Salaries' | 'Rent' | 'Supplies' | 'Utilities' | 'Other'>('Supplies');
+  const [editExpAmount, setEditExpAmount] = useState(0);
+  const [editExpDate, setEditExpDate] = useState('');
+  const [editFile, setEditFile] = useState<File | null>(null);
+  const [editingFileUploading, setEditingFileUploading] = useState(false);
 
   const loadInventoryData = async () => {
     try {
@@ -109,23 +119,157 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!expName.trim()) return;
+    setUploading(true);
 
     try {
-      const attachBytes = expAttachName ? parseInt(expAttachSize) : 0;
+      let attachmentSize = 0;
+      let attachments: any[] = [];
+
+      if (selectedFile) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const tenant = await dataService.getTenant();
+        const filePath = `expenses/${tenant.id}/${Date.now()}.${fileExt}`;
+
+        if (isSupabaseConfigured && supabase) {
+          const { error: uploadErr } = await supabase.storage
+            .from('PraxDocu')
+            .upload(filePath, selectedFile);
+
+          if (uploadErr) throw uploadErr;
+
+          const { data: urlData } = supabase.storage
+            .from('PraxDocu')
+            .getPublicUrl(filePath);
+
+          attachmentSize = selectedFile.size;
+          attachments = [{
+            name: selectedFile.name,
+            type: selectedFile.type,
+            size: selectedFile.size,
+            url: urlData.publicUrl,
+            filePath: filePath
+          }];
+        } else {
+          // Fallback mock
+          attachmentSize = selectedFile.size;
+          attachments = [{
+            name: selectedFile.name,
+            type: selectedFile.type,
+            size: selectedFile.size,
+            url: `https://mock-storage.zenithcore.com/PraxDocu/${filePath}`,
+            filePath: filePath
+          }];
+        }
+      }
+
       await dataService.addExpense({
         expense_name: expName,
         category: expCategory,
         amount: expAmount,
         expense_date: expDate,
-        attachment_size_bytes: attachBytes,
+        attachment_size_bytes: attachmentSize,
+        bill_attachments: attachments,
       });
 
       setExpName('');
-      setExpAttachName('');
+      setSelectedFile(null);
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Logged new clinical overhead expense: ${expName}`);
       triggerRefresh();
+      loadInventoryData();
     } catch (err) {
       console.error("Error logging overhead expense:", err);
+      alert("Error saving overhead expense.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteExpense = async (expId: string, expName: string) => {
+    if (!window.confirm(`Are you sure you want to delete the expense: ${expName}?`)) return;
+    try {
+      await dataService.deleteExpense(expId);
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Deleted overhead expense: ${expName}`);
+      triggerRefresh();
+      loadInventoryData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete expense.");
+    }
+  };
+
+  const handleStartEditExpense = (exp: BusinessExpense) => {
+    setEditingExpense(exp);
+    setEditExpName(exp.expense_name);
+    setEditExpCategory(exp.category);
+    setEditExpAmount(exp.amount);
+    setEditExpDate(exp.expense_date);
+    setEditFile(null);
+  };
+
+  const handleUpdateExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpense) return;
+    setEditingFileUploading(true);
+
+    try {
+      let attachmentSize = editingExpense.attachment_size_bytes;
+      let attachments = editingExpense.bill_attachments || [];
+
+      if (editFile) {
+        const fileExt = editFile.name.split('.').pop();
+        const tenant = await dataService.getTenant();
+        const filePath = `expenses/${tenant.id}/${Date.now()}.${fileExt}`;
+
+        if (isSupabaseConfigured && supabase) {
+          const { error: uploadErr } = await supabase.storage
+            .from('PraxDocu')
+            .upload(filePath, editFile);
+
+          if (uploadErr) throw uploadErr;
+
+          const { data: urlData } = supabase.storage
+            .from('PraxDocu')
+            .getPublicUrl(filePath);
+
+          attachmentSize = editFile.size;
+          attachments = [{
+            name: editFile.name,
+            type: editFile.type,
+            size: editFile.size,
+            url: urlData.publicUrl,
+            filePath: filePath
+          }];
+        } else {
+          attachmentSize = editFile.size;
+          attachments = [{
+            name: editFile.name,
+            type: editFile.type,
+            size: editFile.size,
+            url: `https://mock-storage.zenithcore.com/PraxDocu/${filePath}`,
+            filePath: filePath
+          }];
+        }
+      }
+
+      await dataService.updateExpense(editingExpense.id, {
+        expense_name: editExpName,
+        category: editExpCategory,
+        amount: editExpAmount,
+        expense_date: editExpDate,
+        attachment_size_bytes: attachmentSize,
+        bill_attachments: attachments,
+      });
+
+      setEditingExpense(null);
+      setEditFile(null);
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Updated overhead expense: ${editExpName}`);
+      triggerRefresh();
+      loadInventoryData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update expense.");
+    } finally {
+      setEditingFileUploading(false);
     }
   };
 
@@ -309,6 +453,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                   <th className="px-4 py-3">Outlay Date</th>
                   <th className="px-4 py-3">Vouchers Size</th>
                   <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700 dark:divide-slate-800 dark:text-slate-300">
@@ -342,6 +487,33 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                       </td>
                       <td className="px-4 py-3.5 text-right font-extrabold text-slate-900 dark:text-white">
                         ₹{exp.amount.toLocaleString('en-IN')}
+                      </td>
+                      <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
+                        {exp.bill_attachments && exp.bill_attachments[0]?.url && (
+                          <a
+                            href={exp.bill_attachments[0].url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand-500 hover:text-brand-600 font-bold mr-1.5"
+                            title="View Voucher"
+                          >
+                            📎 View
+                          </a>
+                        )}
+                        <button
+                          onClick={() => handleStartEditExpense(exp)}
+                          className="text-brand-500 hover:text-brand-600 font-bold"
+                          title="Edit Outlay"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExpense(exp.id, exp.expense_name)}
+                          className="text-red-500 hover:text-red-750 font-bold ml-1.5"
+                          title="Delete Outlay"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -412,40 +584,121 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Voucher Scan</label>
                 <input
-                  type="text"
-                  value={expAttachName}
-                  onChange={(e) => setExpAttachName(e.target.value)}
-                  placeholder="invoice_receipt.pdf"
-                  className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200"
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setSelectedFile(file);
+                  }}
+                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200 file:mr-2 file:py-0.5 file:px-1.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
                 />
               </div>
             </div>
 
-            {expAttachName && (
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Receipt Size</label>
-                <select
-                  value={expAttachSize}
-                  onChange={(e) => setExpAttachSize(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-3 py-2 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200"
-                >
-                  <option value="120000">120 KB</option>
-                  <option value="550000">550 KB</option>
-                  <option value="2500000">2.4 MB</option>
-                </select>
-              </div>
-            )}
-
             <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg shadow transition-colors"
+              disabled={uploading}
+              className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2.5 rounded-lg shadow transition-colors disabled:opacity-50 font-semibold"
             >
-              Log Overhead Outlay
+              {uploading ? 'Uploading Voucher...' : 'Log Overhead Outlay'}
             </button>
           </form>
         </div>
 
       </div>
+
+      {/* Edit Expense Modal */}
+      {editingExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in">
+            <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center">
+              <h3 className="font-bold text-sm">Edit Business Expense</h3>
+              <button onClick={() => setEditingExpense(null)} className="text-white/80 hover:text-white text-xs font-bold">Close</button>
+            </div>
+            
+            <form onSubmit={handleUpdateExpense} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Expense Label</label>
+                <input
+                  type="text"
+                  required
+                  value={editExpName}
+                  onChange={(e) => setEditExpName(e.target.value)}
+                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Category</label>
+                  <select
+                    value={editExpCategory}
+                    onChange={(e) => setEditExpCategory(e.target.value as any)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200"
+                  >
+                    <option value="Salaries">Salaries</option>
+                    <option value="Rent">Rent</option>
+                    <option value="Supplies">Supplies</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Amount (₹)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={editExpAmount}
+                    onChange={(e) => setEditExpAmount(parseInt(e.target.value) || 0)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Outlay Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={editExpDate}
+                    onChange={(e) => setEditExpDate(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Replace Voucher Scan</label>
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setEditFile(file);
+                    }}
+                    className="w-full rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200 file:mr-2 file:py-0.5 file:px-1.5 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editingFileUploading}
+                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-bold shadow disabled:opacity-50"
+                >
+                  {editingFileUploading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -113,7 +113,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F4F7F9] dark:bg-[#0B0F19] p-4 font-sans transition-colors duration-200">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F7F9] dark:bg-[#0B0F19] p-4 font-sans transition-colors duration-200">
       
       {/* Decorative Blur Orbs */}
       <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-brand-400/20 dark:bg-brand-500/10 rounded-full blur-3xl -z-10 animate-pulse duration-4000" />
@@ -209,8 +209,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </button>
         </form>
 
+      </div>
 
-
+      {/* PraxDoc Logo Below Login Window */}
+      <div className="mt-6 flex flex-col items-center justify-center">
+        <img 
+          src="/praxdoc_logo.png" 
+          alt="PraxDoc Logo" 
+          className="h-14 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity"
+        />
       </div>
     </div>
   );

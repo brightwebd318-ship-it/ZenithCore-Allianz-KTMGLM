@@ -239,10 +239,15 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
       const session = sessions.find((s) => s.id === sessionId);
       if (!session) return;
       
+      const patient = patients.find((p) => p.id === session.patient_id);
+      const patientName = patient
+        ? `${patient.resource_fhir?.name?.[0]?.given?.[0] || ''} ${patient.resource_fhir?.name?.[0]?.family || ''}`.trim() || 'Unknown Patient'
+        : session.patient_id;
+
       await dataService.updateScheduledSessionStatus(sessionId, status);
       await dataService.addAuditTrail(
         'READ_PATIENT',
-        `Marked appointment session for patient ID ${session.patient_id} as ${status === 'completed' ? 'Completed/Done' : 'Cancelled'}`
+        `Marked appointment session for patient ${patientName} as ${status === 'completed' ? 'Completed/Done' : 'Cancelled'}`
       );
       
       // Send notification to admins
@@ -441,14 +446,14 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                               <>
                                 <button
                                   onClick={() => handleUpdateStatus(session.id, 'completed')}
-                                  className="text-[10px] bg-emerald-50 border border-emerald-250 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded font-bold transition-all dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-450"
+                                  className="text-[10px] bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 px-2 py-1 rounded font-bold transition-all dark:bg-emerald-950/20 dark:border-emerald-900/30 dark:text-emerald-450"
                                   title="Mark Done"
                                 >
                                   ✓ Done
                                 </button>
                                 <button
                                   onClick={() => handleUpdateStatus(session.id, 'cancelled')}
-                                  className="text-[10px] bg-rose-50 border border-rose-250 text-rose-700 hover:bg-rose-100 px-2 py-1 rounded font-bold transition-all dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-450"
+                                  className="text-[10px] bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 px-2 py-1 rounded font-bold transition-all dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-450"
                                   title="Cancel appointment"
                                 >
                                   ✕ Cancel

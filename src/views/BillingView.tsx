@@ -311,7 +311,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                     {customItems.map((item) => (
                       <div key={item.id} className="flex justify-between items-center bg-white border border-slate-200/50 p-1.5 rounded dark:bg-slate-900 dark:border-slate-800">
                         <div>
-                          <span className="font-semibold text-slate-800 dark:text-slate-250">{item.name}</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-300">{item.name}</span>
                           <span className="text-slate-400 ml-1.5 font-mono">({item.quantity} x ₹{item.rate})</span>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -522,10 +522,10 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
             }
           `}</style>
 
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden dark:bg-slate-900 dark:border-slate-850 no-print">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden dark:bg-slate-900 dark:border-slate-850">
             
             {/* Top Bar for Actions (Screen Only) */}
-            <div className="bg-slate-100 border-b border-slate-200 px-6 py-4 flex justify-between items-center dark:bg-slate-800 dark:border-slate-700">
+            <div className="bg-slate-100 border-b border-slate-200 px-6 py-4 flex justify-between items-center dark:bg-slate-800 dark:border-slate-700 no-print">
               <span className="font-extrabold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Receipt Document Viewer
               </span>
@@ -638,12 +638,9 @@ Thank you for choosing Zenith Core Alliance!
                   </div>
                   
                   <div>
-                    <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-1.5">Billed From (Practitioner)</h4>
+                    <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-1.5">Billed by</h4>
                     <p className="font-bold text-slate-800 dark:text-slate-100">
                       {staff.find(s => s.id === printableInvoice.associated_practitioner_id)?.full_name || 'Clinic Specialist'}
-                    </p>
-                    <p className="text-slate-500 dark:text-slate-400 text-[10px] mt-0.5">
-                      {staff.find(s => s.id === printableInvoice.associated_practitioner_id)?.position_role || 'Therapist'}
                     </p>
                   </div>
                 </div>

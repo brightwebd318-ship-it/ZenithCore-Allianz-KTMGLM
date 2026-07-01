@@ -220,7 +220,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                 max={500}
                 value={thresholdInput}
                 onChange={(e) => setThresholdInput(parseInt(e.target.value) || 0)}
-                className="w-12 rounded border border-slate-250 px-1 py-0.5 text-center text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500"
+                className="w-12 rounded border border-slate-200 px-1 py-0.5 text-center text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500"
               />
               <span className="text-[11px] font-semibold text-slate-400">hrs</span>
               <button
@@ -362,7 +362,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-250 dark:bg-slate-850 dark:border-slate-800">
+              <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:bg-slate-850 dark:border-slate-800">
                 <th className="px-5 py-4">Staff Member</th>
                 <th className="px-5 py-4">Position</th>
                 <th className="px-5 py-4 text-right">Base Salary</th>
@@ -451,7 +451,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                           className={`relative inline-flex h-4.5 w-9 items-center rounded-full transition-colors focus:outline-none ${
                             !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
                           } ${
-                            isEligible ? 'bg-amber-500' : 'bg-slate-250 dark:bg-slate-700'
+                            isEligible ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'
                           }`}
                           disabled={!canManageStaff}
                           title={isEligible ? 'Bonus System Enabled' : 'Bonus System Disabled'}

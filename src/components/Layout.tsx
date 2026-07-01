@@ -85,6 +85,7 @@ export const Layout: React.FC<LayoutProps> = ({
 
   useEffect(() => {
     if (tenant?.id) {
+      localStorage.setItem('zenith_tenant_logo_name', tenant.business_name);
       const storedLogo = localStorage.getItem(`zenith_tenant_logo_${tenant.id}`);
       if (storedLogo) {
         try {
@@ -139,7 +140,7 @@ export const Layout: React.FC<LayoutProps> = ({
   };
 
   const renderLogoIcon = () => {
-    if (logoConfig.type === 'url' && logoConfig.url) {
+    if ((logoConfig.type === 'url' || logoConfig.type === 'file') && logoConfig.url) {
       return (
         <div className="flex h-10 w-10 items-center justify-center rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-white shadow-sm flex-shrink-0">
           <img src={logoConfig.url} alt="Clinic Logo" className="h-full w-full object-cover" />
@@ -250,7 +251,16 @@ export const Layout: React.FC<LayoutProps> = ({
         </div>
 
         {/* Lower Left Actions */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-3 bg-slate-50/30 dark:bg-[#111827]/50">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-4 bg-slate-50/30 dark:bg-[#111827]/50">
+
+          {/* Brand Logo Banner */}
+          <div className="flex items-center justify-center py-2">
+            <img 
+              src="/praxdoc_logo.png" 
+              alt="PraxDoc Logo" 
+              className="h-12 w-auto object-contain"
+            />
+          </div>
 
           {/* Dark / Light Toggle Switch */}
           <div className="flex items-center justify-between">

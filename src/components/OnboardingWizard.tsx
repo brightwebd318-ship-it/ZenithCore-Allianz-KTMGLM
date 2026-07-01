@@ -19,9 +19,17 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   isFirstTimeSetup = false,
   tenantId,
 }) => {
+  const [isSetupFlow, setIsSetupFlow] = useState(isFirstTimeSetup);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setIsSetupFlow(isFirstTimeSetup);
+      setStep(1);
+    }
+  }, [isOpen, isFirstTimeSetup]);
 
   // Form States
   const [businessName, setBusinessName] = useState(isFirstTimeSetup ? '' : 'Nirvana Physio & Spine');
@@ -39,7 +47,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   const [adminPassword, setAdminPassword] = useState(isFirstTimeSetup ? '' : 'ZenithAdminSecure123');
 
   // Clinic Logo States
-  const [logoType, setLogoType] = useState<'preset' | 'url'>('preset');
+  const [logoType, setLogoType] = useState<'preset' | 'url' | 'file'>('preset');
   const [logoPreset, setLogoPreset] = useState<string>('blue');
   const [logoUrl, setLogoUrl] = useState<string>('');
 
@@ -79,7 +87,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
     setLoading(true);
 
     try {
-      if (isFirstTimeSetup) {
+      if (isSetupFlow) {
         if (!tenantId) {
           throw new Error("No active tenant session found.");
         }
@@ -204,7 +212,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       <div className="flex items-center space-x-2.5 text-brand-600 dark:text-brand-400 pb-2 border-b border-slate-100 dark:border-slate-800">
         <Briefcase className="h-5 w-5" />
         <h3 className="font-bold text-slate-850 dark:text-white">
-          {isFirstTimeSetup ? 'Step 2: Configure Clinic Profile' : 'Step 1: Clinical Business Configuration'}
+          {isSetupFlow ? 'Step 2: Configure Clinic Profile' : 'Step 1: Clinical Business Configuration'}
         </h3>
       </div>
 
@@ -234,7 +242,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         </div>
       </div>
 
-      {!isFirstTimeSetup && (
+      {!isSetupFlow && (
         <div>
           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Subdomain Name</label>
           <div className="flex rounded-lg border border-slate-200 overflow-hidden dark:border-slate-700">
@@ -321,9 +329,16 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           >
             Custom Logo URL
           </button>
+          <button
+            type="button"
+            onClick={() => setLogoType('file')}
+            className={`px-3 py-1.5 rounded-lg border transition-all ${logoType === 'file' ? 'bg-brand-50 border-brand-300 text-brand-700 dark:bg-brand-950/20 dark:border-brand-900/40 dark:text-brand-300' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-400'}`}
+          >
+            Upload File
+          </button>
         </div>
 
-        {logoType === 'preset' ? (
+        {logoType === 'preset' && (
           <div className="grid grid-cols-5 gap-2">
             {[
               { name: 'blue', label: 'Zenith Blue', icon: Activity, bg: 'bg-blue-600' },
@@ -349,7 +364,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
               );
             })}
           </div>
-        ) : (
+        )}
+
+        {logoType === 'url' && (
           <div className="space-y-2">
             <input
               type="url"
@@ -368,6 +385,36 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   onError={(e) => {
                     (e.target as HTMLElement).style.display = 'none';
                   }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {logoType === 'file' && (
+          <div className="space-y-2">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    setLogoUrl(reader.result as string);
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white text-slate-900 dark:bg-slate-800 dark:text-white dark:border-slate-700 focus:outline-none focus:border-brand-500 file:mr-4 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
+            />
+            {logoUrl && logoUrl.startsWith('data:image/') && (
+              <div className="flex items-center space-x-2 p-2 bg-slate-50 border border-slate-150 rounded-lg dark:bg-slate-800/50 dark:border-slate-850">
+                <span className="text-[10px] font-bold text-slate-450 uppercase">Preview:</span>
+                <img
+                  src={logoUrl}
+                  alt="Custom Logo Preview"
+                  className="h-8 w-8 object-cover rounded-lg border border-slate-200 dark:border-slate-750 shadow-sm"
                 />
               </div>
             )}
@@ -407,7 +454,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       <div className="flex items-center space-x-2.5 text-brand-600 dark:text-brand-400 pb-2 border-b border-slate-100 dark:border-slate-800">
         <ShieldCheck className="h-5 w-5" />
         <h3 className="font-bold text-slate-850 dark:text-white">
-          {isFirstTimeSetup ? 'Step 3: Legal Compliance & Billing Setup' : 'Step 2: Compliance & Legal Alignment'}
+          {isSetupFlow ? 'Step 3: Legal Compliance & Billing Setup' : 'Step 2: Compliance & Legal Alignment'}
         </h3>
       </div>
 
@@ -512,15 +559,15 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         <div className="flex items-center justify-between bg-gradient-to-r from-brand-600 to-brand-500 px-6 py-4 text-white">
           <div>
             <h2 className="text-xl font-bold tracking-tight">
-              {isFirstTimeSetup ? 'Link Clinic Workspace' : 'Onboard New Clinic Tenant'}
+              {isSetupFlow ? 'Link Clinic Workspace' : 'Onboard New Clinic Tenant'}
             </h2>
             <p className="text-xs text-brand-100 mt-0.5">
-              {isFirstTimeSetup 
+              {isSetupFlow 
                 ? 'Enter your Supabase Tenant ID to initialize your custom workspace' 
                 : 'Initialize clinical workspace & administrator profile'}
             </p>
           </div>
-          {!isFirstTimeSetup && (
+          {!isSetupFlow && (
             <button onClick={onClose} className="rounded-full p-1 hover:bg-white/10 transition-colors">
               <X className="h-5 w-5" />
             </button>
@@ -531,17 +578,17 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-8 py-3 dark:border-slate-800 dark:bg-slate-800/20">
           <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 1 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
             <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 1 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>1</span>
-            <span>{isFirstTimeSetup ? 'Set Password' : 'Clinical Setup'}</span>
+            <span>{isSetupFlow ? 'Set Password' : 'Clinical Setup'}</span>
           </div>
           <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
           <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 2 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
             <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 2 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>2</span>
-            <span>{isFirstTimeSetup ? 'Clinic Profile' : 'Legal & GST'}</span>
+            <span>{isSetupFlow ? 'Clinic Profile' : 'Legal & GST'}</span>
           </div>
           <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
           <div className={`flex items-center space-x-2 text-xs font-semibold ${step >= 3 ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
             <span className={`flex h-6 w-6 items-center justify-center rounded-full border text-xs ${step >= 3 ? 'border-brand-600 bg-brand-50 font-bold dark:border-brand-400 dark:bg-brand-900/30' : 'border-slate-300'}`}>3</span>
-            <span>{isFirstTimeSetup ? 'Compliance' : 'Admin Creation'}</span>
+            <span>{isSetupFlow ? 'Compliance' : 'Admin Creation'}</span>
           </div>
         </div>
 
@@ -553,7 +600,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="p-6">
-          {isFirstTimeSetup ? (
+          {isSetupFlow ? (
             <>
               {step === 1 && renderPasswordReset()}
               {step === 2 && renderClinicalSetup()}
@@ -581,7 +628,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             </div>
 
             <div className="flex space-x-2">
-              {!isFirstTimeSetup && (
+              {!isSetupFlow && (
                 <button
                   type="button"
                   onClick={onClose}

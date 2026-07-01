@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   BarChart3,
-  Database,
-  HardDrive,
   Activity,
   UserCheck,
   Award,
@@ -13,7 +11,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
-import type { SystemAuditTrail, User as StaffUser, ScheduledSession, BusinessExpense, Invoice } from '../services/dataService';
+import type { User as StaffUser, ScheduledSession, BusinessExpense, Invoice } from '../services/dataService';
 
 interface ReportsViewProps {
   triggerRefresh: () => void;
@@ -21,7 +19,6 @@ interface ReportsViewProps {
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, triggerRefreshKey }) => {
-  const [auditTrails, setAuditTrails] = useState<SystemAuditTrail[]>([]);
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [sessions, setSessions] = useState<ScheduledSession[]>([]);
   const [expenses, setExpenses] = useState<BusinessExpense[]>([]);
@@ -30,25 +27,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   // Hovered slice for pie chart interactivity
   const [hoveredSlice, setHoveredSlice] = useState<{ name: string; value: number; percentage: number; color: string } | null>(null);
 
-  // Filters
-  const [auditFilter, setAuditFilter] = useState<string>('ALL');
-
-  // Quota state
-  const [quota, setQuota] = useState({
-    used_db_storage_mb: 0,
-    max_db_storage_mb: 50,
-    used_file_storage_mb: 0,
-    max_file_storage_mb: 200,
-  });
-
   const loadReportsData = async () => {
     try {
-      const trails = await dataService.getAuditTrails();
-      setAuditTrails(trails);
-      
-      const metrics = await dataService.getTenantResourceMetrics();
-      setQuota(metrics);
-
       const staff = await dataService.getUsers();
       setStaffList(staff);
 
@@ -77,10 +57,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
       ).catch((err) => console.error("Failed to log reports access:", err));
     }
   }, [triggerRefreshKey]);
-
-  // Percentages calculations
-  const dbPercentage = parseFloat(((quota.used_db_storage_mb / quota.max_db_storage_mb) * 100).toFixed(1));
-  const filePercentage = parseFloat(((quota.used_file_storage_mb / quota.max_file_storage_mb) * 100).toFixed(1));
 
   // Financial breakdown computations
   const totalIncome = invoices
@@ -125,11 +101,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
     };
   });
 
-  // Filtered audit trails
-  const filteredAudits = auditFilter === 'ALL'
-    ? auditTrails
-    : auditTrails.filter(trail => trail.action_type === auditFilter);
-
   // Helper to get productivity statistics for a practitioner
   const getProductivityForStaff = (staffId: string) => {
     const staffSessions = sessions.filter(s => s.practitioner_id === staffId);
@@ -159,53 +130,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   return (
     <div className="space-y-8">
       
-      {/* 1. Quota Metering Card */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800">
-          <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800 mb-4">
-            <Database className="h-5 w-5 text-brand-500" />
-            <h4 className="font-bold text-slate-900 dark:text-white">Database Storage Meter (tenant_resource_metrics)</h4>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-xs font-bold text-slate-500 dark:text-slate-400">
-              <span>Used MB / Allowed Capacity</span>
-              <span>{quota.used_db_storage_mb} MB / {quota.max_db_storage_mb} MB ({dbPercentage}% Used)</span>
-            </div>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3.5 overflow-hidden flex">
-              <div
-                style={{ width: `${Math.min(dbPercentage, 105)}%` }}
-                className={`h-full rounded-full transition-all duration-500 ${
-                  dbPercentage > 80 ? 'bg-red-500' : 'bg-brand-500'
-                }`}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800">
-          <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800 mb-4">
-            <HardDrive className="h-5 w-5 text-indigo-500" />
-            <h4 className="font-bold text-slate-900 dark:text-white">File Vault Storage Meter (tenant_resource_metrics)</h4>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-xs font-bold text-slate-500 dark:text-slate-400">
-              <span>Used MB / Allowed Capacity</span>
-              <span>{quota.used_file_storage_mb} MB / {quota.max_file_storage_mb} MB ({filePercentage}% Used)</span>
-            </div>
-            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3.5 overflow-hidden flex">
-              <div
-                style={{ width: `${Math.min(filePercentage, 105)}%` }}
-                className={`h-full rounded-full transition-all duration-500 ${
-                  filePercentage > 80 ? 'bg-red-500' : 'bg-emerald-500'
-                }`}
-              />
-            </div>
-          </div>
-        </div>
-
-      </div>
-
       {/* 2. Interactive Cashflow & Expenses Distribution (Pie chart) */}
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-6">
         <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
@@ -434,78 +358,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
           </table>
         </div>
       </div>
-
-      {/* 3. Forensic Audit Trails Lookup */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 dark:border-slate-800 space-y-3 sm:space-y-0">
-          <div className="flex items-center space-x-2">
-            <BarChart3 className="h-5 w-5 text-indigo-500" />
-            <h3 className="font-bold text-slate-900 dark:text-white">Forensic Audit Trail Lookup</h3>
-          </div>
-
-          {/* Action filters */}
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-slate-400 font-semibold">Filter:</span>
-            <select
-              value={auditFilter}
-              onChange={(e) => setAuditFilter(e.target.value)}
-              className="rounded border border-slate-200 px-3 py-1.5 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500"
-            >
-              <option value="ALL">All Event Traces</option>
-              <option value="SEARCH">SEARCH</option>
-              <option value="READ_PATIENT">READ_PATIENT</option>
-              <option value="FINANCIAL_MUTATION">FINANCIAL_MUTATION</option>
-              <option value="CONSENT_CHANGED">CONSENT_CHANGED</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:bg-slate-850 dark:border-slate-800">
-                <th className="px-4 py-3">Timestamp</th>
-                <th className="px-4 py-3">Event Type</th>
-                <th className="px-4 py-3">Auditable Activity description</th>
-                <th className="px-4 py-3">Operator</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700 dark:divide-slate-800 dark:text-slate-350">
-              {filteredAudits.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="text-center py-6 text-slate-400 italic">No audit trail logs match filter selection.</td>
-                </tr>
-              ) : (
-                filteredAudits.map((trail) => {
-                  const stamp = new Date(trail.created_at).toLocaleString('en-IN');
-                  
-                  return (
-                    <tr key={trail.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                      <td className="px-4 py-3 font-mono text-slate-450 dark:text-slate-500">{stamp}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded font-extrabold text-[9px] uppercase border ${
-                          trail.action_type === 'CONSENT_CHANGED'
-                            ? 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/10 dark:border-amber-900/30'
-                            : trail.action_type === 'FINANCIAL_MUTATION'
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/10 dark:border-emerald-900/30'
-                            : trail.action_type === 'READ_PATIENT'
-                            ? 'bg-brand-50 border-brand-200 text-brand-850 dark:bg-brand-950/10 dark:border-brand-900/30'
-                            : 'bg-slate-50 border-slate-200 text-slate-655 dark:bg-slate-850'
-                        }`}>
-                          {trail.action_type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-slate-850 dark:text-slate-200">{trail.description}</td>
-                      <td className="px-4 py-3 font-bold">{trail.performed_by}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
     </div>
   );
 };

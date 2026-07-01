@@ -414,7 +414,7 @@ export async function updateInventoryStockAction(accessToken: string, itemId: st
 export async function getExpensesAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const tenantId = await getTenantIdFromToken(supabase);
-  const { data, error } = await supabase.from('expenses').select('*').eq('tenant_id', tenantId);
+  const { data, error } = await supabase.from('business_expenses').select('*').eq('tenant_id', tenantId);
   if (error) throw error;
   return data;
 }
@@ -422,8 +422,34 @@ export async function getExpensesAction(accessToken: string) {
 export async function addExpenseAction(accessToken: string, newExpensePayload: any) {
   const supabase = createServerSupabaseClient(accessToken);
   const { data, error } = await supabase
-    .from('expenses')
+    .from('business_expenses')
     .insert([newExpensePayload])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteExpenseAction(accessToken: string, expenseId: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { error } = await supabase
+    .from('business_expenses')
+    .delete()
+    .eq('id', expenseId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  return true;
+}
+
+export async function updateExpenseAction(accessToken: string, expenseId: string, updates: any) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase
+    .from('business_expenses')
+    .update(updates)
+    .eq('id', expenseId)
+    .eq('tenant_id', tenantId)
     .select()
     .single();
   if (error) throw error;
@@ -452,10 +478,11 @@ export async function addAuditTrailAction(accessToken: string, dbRow: any) {
 
 export async function truncateAuditTrailsAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
   const { error } = await supabase
     .from('system_audit_trails')
     .delete()
-    .neq('id', '00000000-0000-0000-0000-000000000000');
+    .eq('tenant_id', tenantId);
   if (error) throw error;
   return true;
 }

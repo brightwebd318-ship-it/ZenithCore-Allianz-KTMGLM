@@ -39,11 +39,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
           .filter((inv) => String(inv.payment_status).toUpperCase() === 'PAID')
           .reduce((sum, inv) => sum + inv.total_amount, 0);
 
-        // Count appointments today in local timezone
+        const staff = await dataService.getUsers();
+
+        // Count appointments today in local timezone for active accounts
         const todayLocalStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
         const todaySessions = appointments.filter((app) => {
           const appLocalDate = new Date(app.start_time).toLocaleDateString('sv-SE');
-          return appLocalDate === todayLocalStr;
+          if (appLocalDate !== todayLocalStr) return false;
+          
+          // Do not take count of appointments already marked as done
+          if (app.status === 'completed') return false;
+
+          // Verify practitioner account is active
+          const practitioner = staff.find((u) => u.id === app.practitioner_id);
+          if (practitioner && practitioner.resource_fhir?.active === false) return false;
+
+          // Verify patient account is active
+          const patient = patients.find((p) => p.id === app.patient_id);
+          if (patient && patient.resource_fhir?.active === false) return false;
+
+          return true;
         }).length;
 
         // Count my completed sessions and hours
@@ -102,7 +117,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
               </h3>
               <button
                 onClick={() => setActiveTab('Patients')}
-                className="text-brand-550 dark:text-brand-400 hover:text-brand-600 font-bold text-xs mt-2 flex items-center"
+                className="text-brand-500 dark:text-brand-400 hover:text-brand-600 font-bold text-xs mt-2 flex items-center"
               >
                 View patient roster <ArrowRight className="h-3 w-3 ml-1" />
               </button>
@@ -122,7 +137,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
             </h3>
             <button
               onClick={() => setActiveTab('Appointments')}
-              className="text-brand-550 dark:text-brand-400 hover:text-brand-600 font-bold text-xs mt-2 flex items-center"
+              className="text-brand-500 dark:text-brand-400 hover:text-brand-600 font-bold text-xs mt-2 flex items-center"
             >
               View shift sessions <ArrowRight className="h-3 w-3 ml-1" />
             </button>
@@ -143,7 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
               </h3>
               <button
                 onClick={() => setActiveTab('Billing')}
-                className="text-brand-550 dark:text-brand-400 hover:text-brand-600 font-bold text-xs mt-2 flex items-center"
+                className="text-brand-500 dark:text-brand-400 hover:text-brand-600 font-bold text-xs mt-2 flex items-center"
               >
                 Go to billing console <ArrowRight className="h-3 w-3 ml-1" />
               </button>
