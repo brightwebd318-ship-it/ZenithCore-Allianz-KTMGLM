@@ -6,12 +6,12 @@ import type { User as StaffUser } from '../services/dataService';
 interface StaffViewProps {
   triggerRefresh: () => void;
   triggerRefreshKey: number;
+  currentUser: StaffUser | null;
 }
 
-export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRefreshKey }) => {
+export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRefreshKey, currentUser }) => {
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
   
   // Status filter state
   const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'Paused' | 'Inactive'>('All');
@@ -65,9 +65,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
     try {
       const data = await dataService.getUsers();
       setStaffList(data);
-      const curUser = await dataService.getCurrentUser();
-      setCurrentUser(curUser);
-      if (curUser?.position_role === 'Admin') {
+      if (currentUser?.position_role === 'Admin') {
         const statuses = await dataService.getAuthUsersStatus();
         setAuthStatuses(statuses);
       }
@@ -600,16 +598,16 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                     <div className="mt-4 space-y-1 text-xs text-slate-500 dark:text-slate-400">
                       <p>Email: <strong className="text-slate-700 dark:text-slate-300">{user.email}</strong></p>
                       {user.resource_fhir?.mobile && (
-                        <p>Mobile: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.mobile}</strong></p>
+                        <p>Mobile: <strong className="text-slate-700 dark:text-slate-300">{currentUser?.can_view_personal_data ? user.resource_fhir.mobile : '••••••••••'}</strong></p>
                       )}
                       {user.resource_fhir?.aadhaar && (
-                        <p>Aadhaar: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.aadhaar}</strong></p>
+                        <p>Aadhaar: <strong className="text-slate-700 dark:text-slate-300">{currentUser?.can_view_personal_data ? user.resource_fhir.aadhaar : '•••• •••• ••••'}</strong></p>
                       )}
                       {user.resource_fhir?.address && (
-                        <p>Address: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.address}</strong></p>
+                        <p>Address: <strong className="text-slate-700 dark:text-slate-300">{currentUser?.can_view_personal_data ? user.resource_fhir.address : '••••••••••••••••'}</strong></p>
                       )}
                       {user.resource_fhir?.primary_contact_name && (
-                        <p>Primary Contact: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.primary_contact_name} ({user.resource_fhir.primary_contact_phone || 'No phone'})</strong></p>
+                        <p>Primary Contact: <strong className="text-slate-700 dark:text-slate-300">{user.resource_fhir.primary_contact_name} ({currentUser?.can_view_personal_data ? (user.resource_fhir.primary_contact_phone || 'No phone') : '••••••••••'})</strong></p>
                       )}
                       <p>Base Salary: <strong className="text-slate-700 dark:text-slate-300">₹{user.base_salary_monthly.toLocaleString('en-IN')}/mo</strong></p>
                       <p>Session Bonus: <strong className="text-slate-700 dark:text-slate-300">{user.bonus_system_enabled ? 'Enabled' : 'Disabled'}</strong></p>
@@ -1167,53 +1165,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                       </button>
                     </div>
 
-                    {/* can_manage_finance */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Financial Data</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_manage_finance')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_manage_finance ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_manage_finance ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
 
-                    {/* can_print_generate_invoice */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Generate Invoices</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_print_generate_invoice')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_print_generate_invoice ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_print_generate_invoice ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
-
-                    {/* can_manage_staff */}
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 dark:text-slate-400 font-medium">Manage Staff & Clearances</span>
-                      <button
-                        onClick={() => handleToggleFlag(user.id, 'can_manage_staff')}
-                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                          !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                        } ${
-                          user.can_manage_staff ? 'bg-brand-500' : 'bg-slate-200 dark:bg-slate-700'
-                        }`}
-                        disabled={!canManageStaff}
-                      >
-                        <span className={`${user.can_manage_staff ? 'translate-x-4' : 'translate-x-0.5'} inline-block h-3 w-3 transform rounded-full bg-white transition-transform`} />
-                      </button>
-                    </div>
                   </div>
                 </div>
 

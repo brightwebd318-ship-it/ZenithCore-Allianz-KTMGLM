@@ -1232,7 +1232,7 @@ export const dataService = {
         totalNet: { value: baseAmount, currency: 'INR' },
         totalGross: { value: total_amount, currency: 'INR' },
         lineItem: [
-          {
+          ...(sessions > 0 ? [{
             description: 'Therapy Session Units',
             quantity: sessions,
             priceComponent: [{
@@ -1240,7 +1240,7 @@ export const dataService = {
               factor: sessions,
               amount: { value: sessionRate, currency: 'INR' }
             }]
-          },
+          }] : []),
           ...(customItems || []).map(item => ({
             description: item.name,
             quantity: item.quantity,

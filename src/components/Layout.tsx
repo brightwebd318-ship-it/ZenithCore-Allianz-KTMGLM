@@ -194,7 +194,9 @@ export const Layout: React.FC<LayoutProps> = ({
     }
   };
 
-  const enabledTabs = currentUser?.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser?.position_role || '');
+  const enabledTabsRaw = currentUser?.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser?.position_role || '');
+  const hasPatientsAccess = currentUser ? (currentUser.can_view_personal_data && currentUser.can_view_medical_history) : true;
+  const enabledTabs = hasPatientsAccess ? enabledTabsRaw : enabledTabsRaw.filter((t: string) => t !== 'Patients');
 
   const navigationItems = [
     { name: 'Dashboard' as TabType, icon: LayoutDashboard },

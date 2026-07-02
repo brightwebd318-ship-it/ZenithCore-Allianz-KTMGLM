@@ -17,11 +17,11 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   // Form States
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState('');
-  const [sessionsCount, setSessionsCount] = useState(1);
+  const [sessionsCount, setSessionsCount] = useState(0);
   const [ratePerSession, setRatePerSession] = useState(1200);
 
   // Custom manual entries state
-  const [customItems, setCustomItems] = useState<Array<{ id: string; name: string; quantity: number; rate: number }>>([]);
+  const [customItems, setCustomItems] = useState<Array<{ id: string; name: string; quantity: number; rate: number; inventoryId?: string }>>([]);
   const [newItemName, setNewItemName] = useState('');
   const [newItemRate, setNewItemRate] = useState(0);
   const [newItemQty, setNewItemQty] = useState(1);
@@ -87,7 +87,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
         id: Math.random().toString(36).substring(2, 9),
         name: newItemName.trim(),
         rate: newItemRate,
-        quantity: newItemQty
+        quantity: newItemQty,
+        inventoryId: selectedInventoryId !== 'custom' ? selectedInventoryId : undefined
       }
     ]);
     setNewItemName('');
@@ -109,6 +110,17 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       const customCost = customItems.reduce((sum, item) => sum + item.quantity * item.rate, 0);
       const baseAmount = sessionsCost + customCost;
       const applyGst = selectedPatient ? selectedPatient.gst_enabled : false;
+
+      // Deduct inventory count for items that came from catalog
+      for (const item of customItems) {
+        if (item.inventoryId) {
+          const invItem = inventory.find(i => i.id === item.inventoryId);
+          if (invItem) {
+            const nextStock = Math.max(0, invItem.stock_count - item.quantity);
+            await dataService.updateInventoryStock(item.inventoryId, nextStock);
+          }
+        }
+      }
 
       const newInv = await dataService.addInvoice(
         selectedPatientId,
@@ -211,10 +223,10 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Session Count</label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     max={100}
                     value={sessionsCount}
-                    onChange={(e) => setSessionsCount(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setSessionsCount(parseInt(e.target.value) || 0)}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                   />
                 </div>
@@ -428,7 +440,9 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                       </td>
                       <td className="px-4 py-3">
                         <span className="font-semibold block">{pName}</span>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">{invoice.session_count_incremented} Session units</span>
+                        {invoice.session_count_incremented > 0 && (
+                          <span className="text-[10px] text-slate-400 block mt-0.5">{invoice.session_count_incremented} Session units</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-mono text-[10px]">
                         {invoice.apply_gst ? (
@@ -460,14 +474,6 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                         )}
                       </td>
                       <td className="px-4 py-3 text-right space-x-1.5">
-                        {String(invoice.payment_status).toUpperCase() !== 'PAID' && (
-                          <button
-                            onClick={() => handleUpdateStatus(invoice.id, 'PAID')}
-                            className="bg-emerald-50 text-emerald-600 text-[10px] font-bold px-2 py-1 rounded border border-emerald-100 dark:bg-emerald-950/10 dark:text-emerald-400 hover:bg-emerald-100"
-                          >
-                            Mark Paid
-                          </button>
-                        )}
                         <button
                           onClick={() => handleViewInvoicePDF(invoice)}
                           className="bg-brand-50 text-brand-600 text-[10px] font-bold px-2 py-1 rounded border border-brand-100 dark:bg-brand-950/20 dark:text-brand-400 hover:bg-brand-100 inline-flex items-center space-x-1"
@@ -531,7 +537,10 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
               </span>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    window.print();
+                    handleUpdateStatus(printableInvoice.id, 'PAID');
+                  }}
                   className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-brand-600 transition-all flex items-center space-x-1 shadow-sm"
                 >
                   <span>🖨️ Print / Save PDF</span>
@@ -573,13 +582,17 @@ Thank you for choosing Zenith Core Alliance!
                     link.href = url;
                     link.download = `Invoice_${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}.txt`;
                     link.click();
+                    handleUpdateStatus(printableInvoice.id, 'PAID');
                   }}
                   className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-emerald-700 transition-all flex items-center space-x-1 shadow-sm"
                 >
                   <span>📥 Download Text Receipt</span>
                 </button>
                 <button
-                  onClick={() => setPrintableInvoice(null)}
+                  onClick={() => {
+                    handleUpdateStatus(printableInvoice.id, 'PAID');
+                    setPrintableInvoice(null);
+                  }}
                   className="bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-all"
                 >
                   Close
@@ -658,13 +671,15 @@ Thank you for choosing Zenith Core Alliance!
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                      {(printableInvoice.resource_fhir?.lineItem || [
-                        {
-                          description: 'Therapy Session Units',
-                          quantity: printableInvoice.session_count_incremented,
-                          priceComponent: [{ amount: { value: (printableInvoice.total_amount - printableInvoice.computed_tax_amount) / (printableInvoice.session_count_incremented || 1) } }]
-                        }
-                      ]).map((item: any, idx: number) => {
+                      {((printableInvoice.resource_fhir?.lineItem) || (
+                        printableInvoice.session_count_incremented > 0 ? [
+                          {
+                            description: 'Therapy Session Units',
+                            quantity: printableInvoice.session_count_incremented,
+                            priceComponent: [{ amount: { value: (printableInvoice.total_amount - printableInvoice.computed_tax_amount) / (printableInvoice.session_count_incremented || 1) } }]
+                          }
+                        ] : []
+                      )).map((item: any, idx: number) => {
                         const quantity = item.quantity || 1;
                         const rate = item.priceComponent?.[0]?.amount?.value || 0;
                         const lineTotal = quantity * rate;

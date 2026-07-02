@@ -150,7 +150,9 @@ export default function Home() {
         }
       };
 
-      const enabledTabs = currentUser.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser.position_role);
+      const enabledTabsRaw = currentUser.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser.position_role);
+      const hasPatientsAccess = currentUser.can_view_personal_data && currentUser.can_view_medical_history;
+      const enabledTabs = hasPatientsAccess ? enabledTabsRaw : enabledTabsRaw.filter((t: string) => t !== 'Patients');
       
       if (!enabledTabs.includes(activeTab) && activeTab !== 'Administrative Controls') {
         if (enabledTabs.length > 0) {
@@ -205,6 +207,7 @@ export default function Home() {
           <PatientsView
             triggerRefresh={triggerRefresh}
             triggerRefreshKey={refreshKey}
+            currentUser={currentUser}
           />
         );
       case 'Appointments':
@@ -246,6 +249,7 @@ export default function Home() {
           <StaffView
             triggerRefresh={triggerRefresh}
             triggerRefreshKey={refreshKey}
+            currentUser={currentUser}
           />
         );
       case 'Salary':

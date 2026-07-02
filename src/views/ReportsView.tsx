@@ -27,6 +27,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   // Hovered slice for pie chart interactivity
   const [hoveredSlice, setHoveredSlice] = useState<{ name: string; value: number; percentage: number; color: string } | null>(null);
 
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
   const loadReportsData = async () => {
     try {
       const staff = await dataService.getUsers();
@@ -101,9 +104,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
     };
   });
 
+  const filteredSessions = sessions.filter((s) => {
+    if (!s.start_time) return true;
+    const sDate = s.start_time.split('T')[0];
+    if (fromDate && sDate < fromDate) return false;
+    if (toDate && sDate > toDate) return false;
+    return true;
+  });
+
+  const totalAppointmentsCount = filteredSessions.length;
+  const totalCompletedSessionsCount = filteredSessions.filter(s => s.status === 'completed').length;
+
   // Helper to get productivity statistics for a practitioner
   const getProductivityForStaff = (staffId: string) => {
-    const staffSessions = sessions.filter(s => s.practitioner_id === staffId);
+    const staffSessions = filteredSessions.filter(s => s.practitioner_id === staffId);
     const scheduledCount = staffSessions.filter(s => s.status === 'scheduled' || !s.status).length;
     const completedCount = staffSessions.filter(s => s.status === 'completed').length;
     const cancelledCount = staffSessions.filter(s => s.status === 'cancelled').length;
@@ -289,9 +303,69 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
 
       {/* 3. Clinical Productivity & Hours Report */}
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
-        <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-          <Activity className="h-5 w-5 text-emerald-500" />
-          <h3 className="font-bold text-slate-900 dark:text-white">Clinical Productivity & Hours Report</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 dark:border-slate-800 space-y-2 sm:space-y-0">
+          <div className="flex items-center space-x-2">
+            <Activity className="h-5 w-5 text-emerald-500" />
+            <h3 className="font-bold text-slate-900 dark:text-white">Clinical Productivity & Hours Report</h3>
+          </div>
+          
+          <div className="flex items-center space-x-2 text-xs">
+            <div className="flex items-center space-x-1">
+              <span className="text-slate-400 font-bold">From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-slate-800 dark:text-slate-200 focus:outline-none"
+              />
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="text-slate-400 font-bold">To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-slate-800 dark:text-slate-200 focus:outline-none"
+              />
+            </div>
+            {(fromDate || toDate) && (
+              <button
+                onClick={() => {
+                  setFromDate('');
+                  setToDate('');
+                }}
+                className="text-red-500 hover:text-red-650 font-bold uppercase text-[10px]"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Summary metrics for productivity */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-2">
+          <div className="bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-150 dark:border-slate-800 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">Total Appointments</span>
+              <h4 className="text-xl font-black text-slate-900 dark:text-white mt-1">
+                {totalAppointmentsCount}
+              </h4>
+            </div>
+            <div className="h-9 w-9 bg-blue-50 dark:bg-blue-950/20 rounded-lg flex items-center justify-center">
+              <Activity className="h-5 w-5 text-blue-500" />
+            </div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-150 dark:border-slate-800 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">Total Completed Sessions</span>
+              <h4 className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {totalCompletedSessionsCount}
+              </h4>
+            </div>
+            <div className="h-9 w-9 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg flex items-center justify-center">
+              <UserCheck className="h-5 w-5 text-emerald-500" />
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

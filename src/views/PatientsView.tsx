@@ -20,19 +20,20 @@ import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 interface PatientsViewProps {
   triggerRefresh: () => void;
   triggerRefreshKey: number;
+  currentUser: StaffUser | null;
 }
 
-export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, triggerRefreshKey }) => {
+export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, triggerRefreshKey, currentUser }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [logs, setLogs] = useState<ClinicalLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
   const [revealPersonalData, setRevealPersonalData] = useState(false);
   const [patientInvoices, setPatientInvoices] = useState<Invoice[]>([]);
   const [printableInvoice, setPrintableInvoice] = useState<Invoice | null>(null);
   const [patientSessions, setPatientSessions] = useState<ScheduledSession[]>([]);
+  const [showInvoices, setShowInvoices] = useState(false);
 
   // New Patient Form State
   const [showAddForm, setShowAddForm] = useState(false);
@@ -76,8 +77,6 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
         }
         const users = await dataService.getUsers();
         setStaffList(users);
-        const curUser = await dataService.getCurrentUser();
-        setCurrentUser(curUser);
       } catch (err) {
         console.error('Error fetching patients:', err);
       } finally {
@@ -95,8 +94,10 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
 
   useEffect(() => {
     if (selectedPatient) {
-      // Reset reveal toggle on patient change for privacy safety
+      // Reset reveal toggle and invoices toggle on patient change for privacy safety
       setRevealPersonalData(false);
+      setShowInvoices(false);
+      setPatientInvoices([]);
 
       // Audit log patient access
       if (selectedPatient.id !== lastLoggedPatientId.current) {
@@ -127,25 +128,39 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
 
   useEffect(() => {
     if (selectedPatient) {
-      const fetchInvoicesAndSessions = async () => {
+      const fetchSessions = async () => {
         try {
-          const invs = await dataService.getInvoices();
-          const filteredInvs = invs.filter((inv) => inv.patient_id === selectedPatient.id);
-          setPatientInvoices(filteredInvs);
-
           const sess = await dataService.getScheduledSessions();
           const filteredSess = sess.filter((s) => s.patient_id === selectedPatient.id);
           setPatientSessions(filteredSess);
         } catch (err) {
-          console.error('Error fetching patient invoices and sessions:', err);
+          console.error('Error fetching patient sessions:', err);
         }
       };
-      fetchInvoicesAndSessions();
+      fetchSessions();
     } else {
-      setPatientInvoices([]);
       setPatientSessions([]);
     }
   }, [selectedPatient, triggerRefreshKey]);
+
+  useEffect(() => {
+    const fetchInvoicesForPatient = async () => {
+      if (!selectedPatient) return;
+      try {
+        const invs = await dataService.getInvoices();
+        const filteredInvs = invs.filter((inv) => inv.patient_id === selectedPatient.id);
+        setPatientInvoices(filteredInvs);
+      } catch (err) {
+        console.error('Error fetching patient invoices:', err);
+      }
+    };
+
+    if (selectedPatient && showInvoices) {
+      fetchInvoicesForPatient();
+    } else {
+      setPatientInvoices([]);
+    }
+  }, [selectedPatient, showInvoices, triggerRefreshKey]);
 
   // Debounce search query audit logging
   useEffect(() => {
@@ -369,6 +384,29 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
       console.error(err);
     }
   };
+
+  const handleUpdateStatus = async (invId: string, status: Invoice['payment_status']) => {
+    try {
+      await dataService.updateInvoiceStatus(invId, status);
+      triggerRefresh();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const hasAccess = currentUser?.can_view_personal_data && currentUser?.can_view_medical_history;
+  
+  if (currentUser && !hasAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-red-200 rounded-xl dark:bg-[#111827] dark:border-red-950/20 max-w-xl mx-auto mt-12 shadow-lg col-span-full">
+        <ShieldAlert className="h-12 w-12 text-red-500 mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Access Denied</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-450 mt-2 max-w-md">
+          Viewing patient clinical charts and personal ledger records requires both 'Read Personal Data' and 'Read Medical Logs' privileges. Please contact your system administrator.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -646,87 +684,6 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
               </div>
             </div>
 
-            {/* Previous Invoices Ledger */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 animate-fade-in">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center">
-                <CreditCard className="h-4 w-4 mr-2 text-brand-500" />
-                Previous Invoices Ledger
-              </h4>
-              
-              <div className="mt-4 space-y-3">
-                {patientInvoices.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-6 text-center bg-slate-50 dark:bg-slate-800/10 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
-                    <CreditCard className="h-8 w-8 text-slate-350 dark:text-slate-650 mb-2" />
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">No invoices found for this patient.</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100 dark:divide-slate-850">
-                    {patientInvoices.map((invoice, index) => {
-                      const practitioner = staffList.find(s => s.id === invoice.associated_practitioner_id)?.full_name || 'Clinic Specialist';
-                      const identifier = invoice.resource_fhir?.identifier?.[0]?.value || invoice.id;
-                      const formattedDate = new Date(invoice.created_at).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                      });
-                      
-                      return (
-                        <div key={invoice.id} className={`flex flex-col sm:flex-row sm:items-center sm:justify-between py-3.5 ${index === 0 ? 'pt-0' : ''} ${index === patientInvoices.length - 1 ? 'pb-0' : ''}`}>
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-bold font-mono text-sm text-slate-900 dark:text-white">
-                                {identifier}
-                              </span>
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                {formattedDate}
-                              </span>
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-450">
-                              Practitioner: <span className="font-semibold text-slate-700 dark:text-slate-300">{practitioner}</span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center justify-between sm:justify-end space-x-4 mt-3 sm:mt-0">
-                            <div className="text-right">
-                              <div className="text-sm font-extrabold text-slate-900 dark:text-white font-mono">
-                                ₹{invoice.total_amount.toLocaleString('en-IN')}
-                              </div>
-                              <div className="mt-0.5">
-                                {String(invoice.payment_status).toUpperCase() === 'PAID' && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400">
-                                    PAID
-                                  </span>
-                                )}
-                                {String(invoice.payment_status).toUpperCase() === 'UNPAID' && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-red-100 text-red-800 dark:bg-red-950/20 dark:text-red-400">
-                                    UNPAID
-                                  </span>
-                                )}
-                                {String(invoice.payment_status).toUpperCase() === 'PENDING' && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-850 dark:bg-amber-950/20 dark:text-amber-400">
-                                    PENDING
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <button
-                              onClick={() => handleViewInvoicePDF(invoice)}
-                              className="bg-brand-50 hover:bg-brand-100 text-brand-600 text-xs font-bold px-3 py-1.5 rounded-lg border border-brand-100 dark:bg-brand-950/20 dark:text-brand-400 dark:border-brand-900/30 transition-all shadow-xs inline-flex items-center space-x-1"
-                              title="View PDF / Print Invoice"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              <span>View PDF</span>
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Clinical Logging Timeline */}
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
@@ -873,6 +830,98 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
           )}
         </div>
 
+            {/* Previous Invoices */}
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 animate-fade-in">
+              <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
+                  <CreditCard className="h-4 w-4 mr-2 text-brand-500" />
+                  Previous Invoices
+                </h4>
+                {!showInvoices && (
+                  <button
+                    onClick={() => setShowInvoices(true)}
+                    className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-brand-600 shadow transition-colors"
+                  >
+                    Load Invoices
+                  </button>
+                )}
+              </div>
+              
+              {showInvoices && (
+                <div className="mt-4 space-y-3">
+                  {patientInvoices.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-6 text-center bg-slate-50 dark:bg-slate-800/10 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
+                      <CreditCard className="h-8 w-8 text-slate-350 dark:text-slate-650 mb-2" />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">No invoices found for this patient.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100 dark:divide-slate-855 text-xs">
+                      {patientInvoices.map((invoice, index) => {
+                        const practitioner = staffList.find(s => s.id === invoice.associated_practitioner_id)?.full_name || 'Clinic Specialist';
+                        const identifier = invoice.resource_fhir?.identifier?.[0]?.value || invoice.id;
+                        const formattedDate = new Date(invoice.created_at).toLocaleDateString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        });
+                        
+                        return (
+                          <div key={invoice.id} className={`flex flex-col sm:flex-row sm:items-center sm:justify-between py-3.5 ${index === 0 ? 'pt-0' : ''} ${index === patientInvoices.length - 1 ? 'pb-0' : ''}`}>
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-bold font-mono text-sm text-slate-900 dark:text-white">
+                                  {identifier}
+                                </span>
+                                <span className="text-[10px] text-slate-400 dark:text-slate-550 font-mono">
+                                  {formattedDate}
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">
+                                Practitioner: <span className="font-semibold text-slate-700 dark:text-slate-300">{practitioner}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-between sm:justify-end space-x-4 mt-3 sm:mt-0">
+                              <div className="text-right">
+                                <div className="text-sm font-extrabold text-slate-900 dark:text-white font-mono">
+                                  ₹{invoice.total_amount.toLocaleString('en-IN')}
+                                </div>
+                                <div className="mt-0.5">
+                                  {String(invoice.payment_status).toUpperCase() === 'PAID' && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400">
+                                      PAID
+                                    </span>
+                                  )}
+                                  {String(invoice.payment_status).toUpperCase() === 'UNPAID' && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-red-100 text-red-800 dark:bg-red-950/20 dark:text-red-400">
+                                      UNPAID
+                                    </span>
+                                  )}
+                                  {String(invoice.payment_status).toUpperCase() === 'PENDING' && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-100 text-amber-850 dark:bg-amber-950/20 dark:text-amber-400">
+                                      PENDING
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <button
+                                onClick={() => handleViewInvoicePDF(invoice)}
+                                className="bg-brand-50 hover:bg-brand-100 text-brand-600 text-xs font-bold px-3 py-1.5 rounded-lg border border-brand-100 dark:bg-brand-950/20 dark:text-brand-400 dark:border-brand-900/30 transition-all shadow-xs inline-flex items-center space-x-1"
+                                title="View PDF / Print Invoice"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>View PDF</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center border border-slate-200 border-dashed rounded-xl bg-white p-12 dark:bg-[#111827] dark:border-slate-800 h-[60vh]">
@@ -1089,7 +1138,10 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
               </span>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => {
+                    window.print();
+                    handleUpdateStatus(printableInvoice.id, 'PAID');
+                  }}
                   className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-brand-600 transition-all flex items-center space-x-1 shadow-sm"
                 >
                   <span>🖨️ Print / Save PDF</span>
@@ -1131,13 +1183,17 @@ Thank you for choosing Zenith Ortho-Rehab Care!
                     link.href = url;
                     link.download = `Invoice_${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}.txt`;
                     link.click();
+                    handleUpdateStatus(printableInvoice.id, 'PAID');
                   }}
                   className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-emerald-700 transition-all flex items-center space-x-1 shadow-sm"
                 >
                   <span>📥 Download Text Receipt</span>
                 </button>
                 <button
-                  onClick={() => setPrintableInvoice(null)}
+                  onClick={() => {
+                    handleUpdateStatus(printableInvoice.id, 'PAID');
+                    setPrintableInvoice(null);
+                  }}
                   className="bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-all"
                 >
                   Close
@@ -1213,13 +1269,15 @@ Thank you for choosing Zenith Ortho-Rehab Care!
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                      {(printableInvoice.resource_fhir?.lineItem || [
-                        {
-                          description: 'Therapy Session Units',
-                          quantity: printableInvoice.session_count_incremented,
-                          priceComponent: [{ amount: { value: (printableInvoice.total_amount - printableInvoice.computed_tax_amount) / (printableInvoice.session_count_incremented || 1) } }]
-                        }
-                      ]).map((item: any, idx: number) => {
+                      {((printableInvoice.resource_fhir?.lineItem) || (
+                        printableInvoice.session_count_incremented > 0 ? [
+                          {
+                            description: 'Therapy Session Units',
+                            quantity: printableInvoice.session_count_incremented,
+                            priceComponent: [{ amount: { value: (printableInvoice.total_amount - printableInvoice.computed_tax_amount) / (printableInvoice.session_count_incremented || 1) } }]
+                          }
+                        ] : []
+                      )).map((item: any, idx: number) => {
                         const quantity = item.quantity || 1;
                         const rate = item.priceComponent?.[0]?.amount?.value || 0;
                         const lineTotal = quantity * rate;
