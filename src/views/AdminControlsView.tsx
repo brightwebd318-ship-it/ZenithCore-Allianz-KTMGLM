@@ -8,7 +8,8 @@ import {
   Clock,
   Trash2,
   AlertTriangle,
-  HardDrive
+  HardDrive,
+  Plus
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { SystemAuditTrail, User as StaffUser, Tenant } from '../services/dataService';
@@ -40,6 +41,20 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
   const [searchQuery, setSearchQuery] = useState('');
   const [tenantSettings, setTenantSettings] = useState<Tenant | null>(null);
 
+  // Services Catalog States
+  const [services, setServices] = useState<any[]>([]);
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newServicePrice, setNewServicePrice] = useState(1200);
+
+  const loadServices = async () => {
+    try {
+      const srvs = await dataService.getServices();
+      setServices(srvs);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const loadAdminData = async () => {
     setLoadingLogs(true);
     try {
@@ -54,6 +69,8 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
 
       const tenant = await dataService.getTenant();
       setTenantSettings(tenant);
+
+      await loadServices();
     } catch (err) {
       console.error('Failed to load admin logs:', err);
     } finally {
@@ -183,6 +200,33 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
     triggerDownload(logContent, `zenith_audit_trail_${stamp}.log`, 'text/plain');
   };
 
+  const handleCreateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newServiceName.trim() || newServicePrice < 0) return;
+    try {
+      await dataService.addService(newServiceName.trim(), newServicePrice);
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Added clinic service pricing template: ${newServiceName.trim()} at rate: ₹${newServicePrice}`);
+      setNewServiceName('');
+      setNewServicePrice(1200);
+      setSuccessMsg('Service pricing template successfully added to catalog!');
+      loadServices();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteService = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete service pricing for "${name}"?`)) return;
+    try {
+      await dataService.deleteService(id);
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Deleted clinic service pricing template: ${name}`);
+      setSuccessMsg('Service pricing template deleted from catalog.');
+      loadServices();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="space-y-8">
       
@@ -290,6 +334,7 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
                   <option value="75">75 mins</option>
                   <option value="90">90 mins</option>
                   <option value="120">120 mins</option>
+                  <option value="120">120 mins</option>
                 </select>
                 <p className="text-[10px] text-slate-450 mt-2">
                   Used globally to calculate total time worked from scheduled session counts.
@@ -299,6 +344,98 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
           </div>
         </div>
 
+      </div>
+
+      {/* Clinic Services Templates (CRUD Section) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+          <div className="flex items-center space-x-2">
+            <HardDrive className="h-5 w-5 text-indigo-500" />
+            <h3 className="font-bold text-slate-900 dark:text-white">Clinic Service Pricing Templates</h3>
+          </div>
+          <span className="text-[10px] bg-brand-50 border border-brand-100 px-2.5 py-0.5 rounded font-bold text-brand-600 dark:bg-brand-950/20 dark:border-brand-900/30">
+            Billing Catalog
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
+          {/* Create new service form (4 cols) */}
+          <form onSubmit={handleCreateService} className="md:col-span-4 space-y-3.5 bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-350">Add Service Template</h4>
+            
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Service / Session Name</label>
+              <input
+                type="text"
+                required
+                value={newServiceName}
+                onChange={(e) => setNewServiceName(e.target.value)}
+                placeholder="e.g. Spine Mobilization Therapy"
+                className="w-full rounded border border-slate-200 px-3 py-2 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Rate Charge per Session (₹)</label>
+              <input
+                type="number"
+                required
+                min={0}
+                value={newServicePrice}
+                onChange={(e) => setNewServicePrice(parseInt(e.target.value) || 0)}
+                className="w-full rounded border border-slate-200 px-3 py-2 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Register Service</span>
+            </button>
+          </form>
+
+          {/* List of registered services (8 cols) */}
+          <div className="md:col-span-8 space-y-2">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-350">Registered Catalog Rates</h4>
+            
+            <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-lg">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/40 text-[10px] font-bold text-slate-450 uppercase border-b border-slate-150 dark:border-slate-800">
+                    <th className="px-4 py-2">Service Description</th>
+                    <th className="px-4 py-2">Base Pricing per Session</th>
+                    <th className="px-4 py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350 font-medium">
+                  {services.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-4 text-center text-slate-400 italic">No custom services defined. Default rates apply.</td>
+                    </tr>
+                  ) : (
+                    services.map((srv) => (
+                      <tr key={srv.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{srv.name}</td>
+                        <td className="px-4 py-3 font-mono font-bold text-indigo-650 dark:text-indigo-400">₹{srv.price.toLocaleString('en-IN')}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteService(srv.id, srv.name)}
+                            className="text-red-500 hover:text-red-750 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                            title="Delete service pricing catalog item"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Manual System Backup Console Card (Full Width) */}

@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase } from './supabaseClient';
 import {
   getTenantAction,
   updateTenantAction,
@@ -15,7 +15,7 @@ import {
   updatePatientGstAction,
   getClinicalLogsAction,
   addClinicalLogAction,
-  softDeleteClinicalLogAction,
+  deleteClinicalLogAction,
   getInvoicesAction,
   addInvoiceAction,
   updateInvoicePaymentStatusAction,
@@ -46,10 +46,10 @@ import {
 } from '../app/actions';
 
 const getAuthToken = async (): Promise<string> => {
-  if (isSupabaseConfigured && supabase) {
+  {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token || '';
-  }
+    }
   return '';
 };
 
@@ -219,25 +219,17 @@ export const subscribeToTable = (table: 'scheduled_sessions' | 'todo_tasks' | 'n
     };
   }
   
-  if (isSupabaseConfigured && supabase) {
+  {
     const channel = supabase
-      .channel(`realtime:${table}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
-        callback(payload);
-      })
-      .subscribe();
-      
+          .channel(`realtime:${table}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
+            callback(payload);
+          })
+          .subscribe();
     return () => {
-      supabase!.removeChannel(channel);
-    };
-  } else {
-    // Mock subscription
-    if (!subscribers[table]) subscribers[table] = {};
-    subscribers[table][subId] = callback;
-    return () => {
-      delete subscribers[table][subId];
-    };
-  }
+          supabase!.removeChannel(channel);
+        };
+    }
 };
 
 const notifySubscribers = (table: 'scheduled_sessions' | 'todo_tasks' | 'notifications', eventType: 'INSERT' | 'UPDATE' | 'DELETE', record: any) => {
@@ -696,102 +688,63 @@ const mapTodoTaskFromDb = (row: any): TodoTask => {
 export const dataService = {
   // TENANTS
   getTenant: async (): Promise<Tenant> => {
-    if (isSupabaseConfigured && supabase) {
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error("No active auth token available on client.");
-      }
-      return getTenantAction(token);
-    } else {
-      return getStorageItem('tenant', initialTenant);
-    }
+    {
+        const token = await getAuthToken();
+        if (!token) {
+                throw new Error("No active auth token available on client.");
+              }
+        return getTenantAction(token);
+        }
   },
 
   updateTenant: async (tenant: Partial<Tenant>): Promise<Tenant> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return updateTenantAction(token, tenant);
-    } else {
-      const current = getStorageItem('tenant', initialTenant);
-      const updated = { ...current, ...tenant };
-      setStorageItem('tenant', updated);
-      return updated;
-    }
+      }
   },
 
   // USERS / STAFF
   getUsers: async (): Promise<User[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const data = await getUsersAction(token);
-        return (data || []).map((row: any) => ({
-          ...row,
-          can_manage_staff: row.resource_fhir?.can_manage_staff !== undefined
-            ? row.resource_fhir.can_manage_staff
-            : (row.position_role === 'Admin')
-        }));
-      } catch (err) {
-        console.warn("Error in getUsers:", err);
-        return [];
+              const token = await getAuthToken();
+              const data = await getUsersAction(token);
+              return (data || []).map((row: any) => ({
+                ...row,
+                can_manage_staff: row.resource_fhir?.can_manage_staff !== undefined
+                  ? row.resource_fhir.can_manage_staff
+                  : (row.position_role === 'Admin')
+              }));
+            } catch (err) {
+              console.warn("Error in getUsers:", err);
+              return [];
+            }
       }
-    } else {
-      const localUsers = getStorageItem('users', initialUsers);
-      return localUsers.map((row: any) => ({
-        ...row,
-        can_manage_staff: row.resource_fhir?.can_manage_staff !== undefined
-          ? row.resource_fhir.can_manage_staff
-          : (row.position_role === 'Admin')
-      }));
-    }
   },
 
   getCurrentUser: async (): Promise<User | null> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       if (!token) return null;
       const data = await getCurrentUserAction(token);
       if (!data) return null;
       return {
-        ...data,
-        can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
-          ? data.resource_fhir.can_manage_staff
-          : (data.position_role === 'Admin')
-      };
-    } else {
-      const session = localStorage.getItem('zenith_session');
-      if (session) {
-        try {
-          const parsed = JSON.parse(session);
-          const users = getStorageItem('users', initialUsers);
-          const matched = users.find(u => u.email.toLowerCase() === parsed.email.toLowerCase()) || users[0] || null;
-          if (matched) {
-            return {
-              ...matched,
-              can_manage_staff: matched.resource_fhir?.can_manage_staff !== undefined
-                ? matched.resource_fhir.can_manage_staff
-                : (matched.position_role === 'Admin')
+              ...data,
+              can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
+                ? data.resource_fhir.can_manage_staff
+                : (data.position_role === 'Admin')
             };
-          }
-          return null;
-        } catch {
-          return null;
-        }
       }
-      return null;
-    }
   },
 
   updateUserPermissions: async (userId: string, updates: Partial<User>): Promise<User> => {
     let current: any;
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       const users = await getUsersAction(token);
       current = users.find((u: any) => u.id === userId);
-    } else {
-      const users = getStorageItem('users', initialUsers);
-      current = users.find((u) => u.id === userId);
-    }
+      }
     if (!current) throw new Error('User not found');
 
     const resourceFhir = {
@@ -808,30 +761,16 @@ export const dataService = {
       resource_fhir: resourceFhir,
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       const data = await updateUserPermissionsAction(token, userId, dbPayload);
       return {
-        ...data,
-        can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
-          ? data.resource_fhir.can_manage_staff
-          : (data.position_role === 'Admin')
-      };
-    } else {
-      const users = getStorageItem('users', initialUsers);
-      const idx = users.findIndex((u) => u.id === userId);
-      if (idx !== -1) {
-        users[idx] = { ...users[idx], ...dbPayload };
-        setStorageItem('users', users);
-        return {
-          ...users[idx],
-          can_manage_staff: users[idx].resource_fhir?.can_manage_staff !== undefined
-            ? users[idx].resource_fhir.can_manage_staff
-            : (users[idx].position_role === 'Admin')
-        };
+              ...data,
+              can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
+                ? data.resource_fhir.can_manage_staff
+                : (data.position_role === 'Admin')
+            };
       }
-      throw new Error('User not found');
-    }
   },
 
   addUser: async (user: Omit<User, 'id' | 'tenant_id'> & { id?: string }): Promise<User> => {
@@ -851,26 +790,16 @@ export const dataService = {
       created_at: new Date().toISOString(),
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       const data = await addUserAction(token, newUser);
       return {
-        ...data,
-        can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
-          ? data.resource_fhir.can_manage_staff
-          : (data.position_role === 'Admin')
-      };
-    } else {
-      const users = getStorageItem('users', initialUsers);
-      users.push(newUser as any);
-      setStorageItem('users', users);
-      return {
-        ...newUser,
-        can_manage_staff: newUser.resource_fhir?.can_manage_staff !== undefined
-          ? newUser.resource_fhir.can_manage_staff
-          : (newUser.position_role === 'Admin')
-      } as any;
-    }
+              ...data,
+              can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
+                ? data.resource_fhir.can_manage_staff
+                : (data.position_role === 'Admin')
+            };
+      }
   },
 
   createStaffAuthUser: async (
@@ -880,142 +809,40 @@ export const dataService = {
     role?: 'Admin' | 'Senior Therapist' | 'Receptionist',
     targetUserId?: string
   ): Promise<string> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const tenant = await dataService.getTenant();
       const token = await getAuthToken();
       return createStaffAuthAction(token, email, password, fullName, role, tenant.id, targetUserId);
-    } else {
-      // LocalStorage Mock Mode
-      const tenant = getStorageItem('tenant', initialTenant);
-      const newUserId = targetUserId || generateUUID();
-      
-      // Seed mockup auth session / logins in localstorage if needed
-      const mockLogins = getStorageItem<{ [email: string]: string }>('mock_auth_passwords', {
-        'dibin@zenithcore.com': 'password',
-        'ananya@zenithcore.com': 'password',
-        'rohan@zenithcore.com': 'password',
-      });
-      mockLogins[email.toLowerCase()] = password || 'password';
-      setStorageItem('mock_auth_passwords', mockLogins);
-      
-      const mockStatuses = getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', [
-        { id: 'u1111111-1111-1111-1111-111111111111', exists: true, paused: false },
-        { id: 'u2222222-2222-2222-2222-222222222222', exists: true, paused: false },
-        { id: 'u3333333-3333-3333-3333-333333333333', exists: true, paused: false },
-      ]);
-      
-      const existingIdx = mockStatuses.findIndex(s => s.id === newUserId);
-      if (existingIdx !== -1) {
-        mockStatuses[existingIdx] = { id: newUserId, exists: true, paused: false };
-      } else {
-        mockStatuses.push({ id: newUserId, exists: true, paused: false });
       }
-      setStorageItem('mock_auth_statuses', mockStatuses);
-
-      // If this is a new user (no targetUserId), add to public.users mock list as well
-      if (!targetUserId) {
-        const users = getStorageItem('users', initialUsers);
-        const resourceFhir = {
-          resourceType: 'Practitioner',
-          active: true,
-          name: [{ text: fullName || email.split('@')[0] }],
-          can_manage_staff: role === 'Admin'
-        };
-        const newUser: User = {
-          id: newUserId,
-          tenant_id: tenant.id,
-          email,
-          full_name: fullName || email.split('@')[0],
-          position_role: role || 'Receptionist',
-          medical_council_registration_no: '',
-          can_view_personal_data: true,
-          can_view_medical_history: role !== 'Receptionist',
-          can_manage_finance: role === 'Admin',
-          can_print_generate_invoice: true,
-          can_manage_staff: role === 'Admin',
-          base_salary_monthly: 0,
-          bonus_system_enabled: false,
-          resource_fhir: resourceFhir
-        };
-        users.push(newUser);
-        setStorageItem('users', users);
-      }
-      
-      return newUserId;
-    }
   },
 
   pauseStaffAuthUser: async (targetUserId: string, shouldPause: boolean): Promise<void> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       await pauseStaffAuthAction(token, targetUserId, shouldPause);
-    } else {
-      // LocalStorage Mock Mode
-      const mockStatuses = getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', [
-        { id: 'u1111111-1111-1111-1111-111111111111', exists: true, paused: false },
-        { id: 'u2222222-2222-2222-2222-222222222222', exists: true, paused: false },
-        { id: 'u3333333-3333-3333-3333-333333333333', exists: true, paused: false },
-      ]);
-      const idx = mockStatuses.findIndex(s => s.id === targetUserId);
-      if (idx !== -1) {
-        mockStatuses[idx].paused = shouldPause;
-      } else {
-        mockStatuses.push({ id: targetUserId, exists: true, paused: shouldPause });
       }
-      setStorageItem('mock_auth_statuses', mockStatuses);
-    }
   },
 
   getAuthUsersStatus: async (): Promise<Array<{ id: string; exists: boolean; paused: boolean }>> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return getAuthUsersStatusAction(token);
-    } else {
-      // LocalStorage Mock Mode
-      return getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', [
-        { id: 'u1111111-1111-1111-1111-111111111111', exists: true, paused: false },
-        { id: 'u2222222-2222-2222-2222-222222222222', exists: true, paused: false },
-        { id: 'u3333333-3333-3333-3333-333333333333', exists: true, paused: false },
-      ]);
-    }
+      }
   },
 
   deleteStaffUser: async (targetUserId: string): Promise<void> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       await deleteStaffAction(token, targetUserId);
-    } else {
-      // LocalStorage Mock Mode
-      const users = getStorageItem<User[]>('users', initialUsers);
-      const remainingUsers = users.filter((u) => u.id !== targetUserId);
-      setStorageItem('users', remainingUsers);
-
-      const mockStatuses = getStorageItem<Array<{ id: string; exists: boolean; paused: boolean }>>('mock_auth_statuses', []);
-      const remainingStatuses = mockStatuses.filter((s) => s.id !== targetUserId);
-      setStorageItem('mock_auth_statuses', remainingStatuses);
-    }
+      }
   },
 
   // PATIENTS
   getPatients: async (searchQuery?: string): Promise<Patient[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return getPatientsAction(token, searchQuery);
-    } else {
-      const patients = getStorageItem('patients', initialPatients);
-      if (!searchQuery) return patients;
-      const q = searchQuery.toLowerCase();
-      return patients.filter((p) => {
-        const given = p.resource_fhir?.name?.[0]?.given?.[0]?.toLowerCase() || '';
-        const family = p.resource_fhir?.name?.[0]?.family?.toLowerCase() || '';
-        const full = `${given} ${family}`;
-        return (
-          full.includes(q) ||
-          (p.abha_number || '').toLowerCase().includes(q) ||
-          (p.abha_address || '').toLowerCase().includes(q)
-        );
-      });
-    }
+      }
   },
 
   addPatient: async (patient: Omit<Patient, 'id' | 'tenant_id'>): Promise<Patient> => {
@@ -1029,15 +856,10 @@ export const dataService = {
       gstin: patient.gstin && patient.gstin.trim() !== '' ? patient.gstin.trim() : null,
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return addPatientAction(token, newPatient);
-    } else {
-      const patients = getStorageItem('patients', initialPatients);
-      patients.push(newPatient);
-      setStorageItem('patients', patients);
-      return newPatient;
-    }
+      }
   },
 
   updatePatientConsent: async (
@@ -1051,64 +873,34 @@ export const dataService = {
       consent_withdrawal_requested: withdrawalRequested,
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return updatePatientConsentAction(token, patientId, updates);
-    } else {
-      const patients = getStorageItem('patients', initialPatients);
-      const idx = patients.findIndex((p) => p.id === patientId);
-      if (idx !== -1) {
-        patients[idx] = { ...patients[idx], ...updates };
-        setStorageItem('patients', patients);
-        return patients[idx];
       }
-      throw new Error('Patient not found');
-    }
   },
 
   updatePatientGst: async (patientId: string, gstEnabled: boolean, gstin: string | null): Promise<Patient> => {
     const updates = { gst_enabled: gstEnabled, gstin };
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return updatePatientGstAction(token, patientId, updates);
-    } else {
-      const patients = getStorageItem('patients', initialPatients);
-      const idx = patients.findIndex((p) => p.id === patientId);
-      if (idx !== -1) {
-        patients[idx] = { ...patients[idx], ...updates };
-        setStorageItem('patients', patients);
-        return patients[idx];
       }
-      throw new Error('Patient not found');
-    }
   },
 
   updatePatientResource: async (patientId: string, resourceFhir: any): Promise<Patient> => {
     const updates = { resource_fhir: resourceFhir };
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return updatePatientConsentAction(token, patientId, updates);
-    } else {
-      const patients = getStorageItem('patients', initialPatients);
-      const idx = patients.findIndex((p) => p.id === patientId);
-      if (idx !== -1) {
-        patients[idx] = { ...patients[idx], resource_fhir: resourceFhir };
-        setStorageItem('patients', patients);
-        return patients[idx];
       }
-      throw new Error('Patient not found');
-    }
   },
 
   // CLINICAL LOGS
   getClinicalLogs: async (patientId: string): Promise<ClinicalLog[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return getClinicalLogsAction(token, patientId);
-    } else {
-      const logs = getStorageItem('clinical_logs', initialClinicalLogs);
-      return logs.filter((log) => log.patient_id === patientId && !log.is_deleted);
-    }
+      }
   },
 
   addClinicalLog: async (
@@ -1136,39 +928,25 @@ export const dataService = {
       is_deleted: false,
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return addClinicalLogAction(token, newLog);
-    } else {
-      const logs = getStorageItem('clinical_logs', initialClinicalLogs);
-      logs.push(newLog);
-      setStorageItem('clinical_logs', logs);
-      return newLog;
-    }
+      }
   },
 
   softDeleteClinicalLog: async (logId: string): Promise<void> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
-      await softDeleteClinicalLogAction(token, logId);
-    } else {
-      const logs = getStorageItem('clinical_logs', initialClinicalLogs);
-      const idx = logs.findIndex((l) => l.id === logId);
-      if (idx !== -1) {
-        logs[idx].is_deleted = true;
-        setStorageItem('clinical_logs', logs);
+      await deleteClinicalLogAction(token, logId);
       }
-    }
   },
 
   // INVOICES
   getInvoices: async (): Promise<Invoice[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return getInvoicesAction(token);
-    } else {
-      return getStorageItem('invoices', initialInvoices);
-    }
+      }
   },
 
   addInvoice: async (
@@ -1194,13 +972,11 @@ export const dataService = {
 
     // Get current total count of invoices dynamically to base invoice serial sequence
     let currentInvoicesCount = 0;
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       const dbInvoices = await getInvoicesAction(token);
       currentInvoicesCount = dbInvoices.length;
-    } else {
-      currentInvoicesCount = getStorageItem('invoices', initialInvoices).length;
-    }
+      }
     const nextNum = currentInvoicesCount + 1;
     const invoiceNum = `INV-2026-${String(nextNum).padStart(3, '0')}`;
     const invoiceId = isSupabaseConfigured ? generateUUID() : invoiceNum; // UUID primary key for Supabase, sequential for mock
@@ -1254,57 +1030,32 @@ export const dataService = {
       }
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return addInvoiceAction(token, newInvoice);
-    } else {
-      const invoices = getStorageItem('invoices', initialInvoices);
-      invoices.push(newInvoice);
-      setStorageItem('invoices', invoices);
-      return newInvoice;
-    }
+      }
   },
 
   updateInvoiceStatus: async (invoiceId: string, status: Invoice['payment_status']): Promise<Invoice> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return updateInvoicePaymentStatusAction(token, invoiceId, status.toLowerCase());
-    } else {
-      const invoices = getStorageItem('invoices', initialInvoices);
-      const idx = invoices.findIndex((inv) => inv.id === invoiceId);
-      if (idx !== -1) {
-        invoices[idx].payment_status = status;
-        setStorageItem('invoices', invoices);
-        return invoices[idx];
       }
-      throw new Error('Invoice not found');
-    }
   },
 
   // INVENTORY
   getInventory: async (): Promise<InventoryItem[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return getInventoryAction(token);
-    } else {
-      return getStorageItem('inventory', initialInventory);
-    }
+      }
   },
 
   updateInventoryStock: async (itemId: string, count: number): Promise<InventoryItem> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return updateInventoryStockAction(token, itemId, count);
-    } else {
-      const items = getStorageItem('inventory', initialInventory);
-      const idx = items.findIndex((i) => i.id === itemId);
-      if (idx !== -1) {
-        items[idx].stock_count = count;
-        setStorageItem('inventory', items);
-        return items[idx];
       }
-      throw new Error('Item not found');
-    }
   },
 
   addInventoryItem: async (item: Omit<InventoryItem, 'id' | 'tenant_id'>): Promise<InventoryItem> => {
@@ -1315,40 +1066,33 @@ export const dataService = {
       tenant_id: tenant.id,
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       return addInventoryItemAction(token, newItem);
-    } else {
-      const items = getStorageItem('inventory', initialInventory);
-      items.push(newItem);
-      setStorageItem('inventory', items);
-      return newItem;
-    }
+      }
   },
 
   // EXPENSES
   getExpenses: async (): Promise<BusinessExpense[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const data = await getExpensesAction(token);
-        return (data || []).map((row: any) => ({
-          id: row.id,
-          tenant_id: row.tenant_id,
-          expense_name: row.description || row.expense_name || '',
-          amount: Number(row.amount),
-          category: row.category,
-          expense_date: row.expense_date,
-          attachment_size_bytes: Number(row.attachment_size_bytes || 0),
-          bill_attachments: row.bill_attachments || [],
-        }));
-      } catch (err) {
-        console.warn("Error in getExpenses, falling back to LocalStorage:", err);
-        return getStorageItem('expenses', initialExpenses);
+              const token = await getAuthToken();
+              const data = await getExpensesAction(token);
+              return (data || []).map((row: any) => ({
+                id: row.id,
+                tenant_id: row.tenant_id,
+                expense_name: row.description || row.expense_name || '',
+                amount: Number(row.amount),
+                category: row.category,
+                expense_date: row.expense_date,
+                attachment_size_bytes: Number(row.attachment_size_bytes || 0),
+                bill_attachments: row.bill_attachments || [],
+              }));
+            } catch (err) {
+              console.warn("Error in getExpenses, falling back to LocalStorage:", err);
+              return getStorageItem('expenses', initialExpenses);
+            }
       }
-    } else {
-      return getStorageItem('expenses', initialExpenses);
-    }
   },
 
   addExpense: async (expense: Omit<BusinessExpense, 'id' | 'tenant_id'>): Promise<BusinessExpense> => {
@@ -1363,143 +1107,117 @@ export const dataService = {
       bill_attachments: expense.bill_attachments || [],
     };
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       let userId: string | null = null;
       try {
-        const currentUser = await dataService.getCurrentUser();
-        userId = currentUser?.id || null;
-      } catch (authErr) {
-        console.warn("Failed to retrieve auth user inside addExpense:", authErr);
-      }
-
+              const currentUser = await dataService.getCurrentUser();
+              userId = currentUser?.id || null;
+            } catch (authErr) {
+              console.warn("Failed to retrieve auth user inside addExpense:", authErr);
+            }
       const dbPayload = {
-        ...newExpense,
-        description: expense.expense_name,
-        logged_by: userId,
-      };
-
+              ...newExpense,
+              description: expense.expense_name,
+              logged_by: userId,
+            };
       try {
-        const data = await addExpenseAction(token, dbPayload);
-        return {
-          id: data.id,
-          tenant_id: data.tenant_id,
-          expense_name: data.description || data.expense_name || '',
-          amount: Number(data.amount),
-          category: data.category,
-          expense_date: data.expense_date,
-          attachment_size_bytes: Number(data.attachment_size_bytes || 0),
-          bill_attachments: data.bill_attachments || [],
-        };
-      } catch (err) {
-        console.warn("Error inserting expense to Supabase, falling back to LocalStorage:", err);
-        const mockExpense: BusinessExpense = {
-          ...newExpense,
-          expense_name: expense.expense_name,
-        };
-        const expenses = getStorageItem('expenses', initialExpenses);
-        expenses.push(mockExpense);
-        setStorageItem('expenses', expenses);
-        return mockExpense;
+              const data = await addExpenseAction(token, dbPayload);
+              return {
+                id: data.id,
+                tenant_id: data.tenant_id,
+                expense_name: data.description || data.expense_name || '',
+                amount: Number(data.amount),
+                category: data.category,
+                expense_date: data.expense_date,
+                attachment_size_bytes: Number(data.attachment_size_bytes || 0),
+                bill_attachments: data.bill_attachments || [],
+              };
+            } catch (err) {
+              console.warn("Error inserting expense to Supabase, falling back to LocalStorage:", err);
+              const mockExpense: BusinessExpense = {
+                ...newExpense,
+                expense_name: expense.expense_name,
+              };
+              const expenses = getStorageItem('expenses', initialExpenses);
+              expenses.push(mockExpense);
+              setStorageItem('expenses', expenses);
+              return mockExpense;
+            }
       }
-    } else {
-      const mockExpense: BusinessExpense = {
-        ...newExpense,
-        expense_name: expense.expense_name,
-      };
-      const expenses = getStorageItem('expenses', initialExpenses);
-      expenses.push(mockExpense);
-      setStorageItem('expenses', expenses);
-      return mockExpense;
-    }
   },
 
   deleteExpense: async (expenseId: string): Promise<boolean> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        await deleteExpenseAction(token, expenseId);
-        return true;
-      } catch (err) {
-        console.warn("Error deleting expense in Supabase, falling back to LocalStorage:", err);
-        const expenses = getStorageItem('expenses', initialExpenses);
-        const filtered = expenses.filter((e: any) => e.id !== expenseId);
-        setStorageItem('expenses', filtered);
-        return true;
+              const token = await getAuthToken();
+              await deleteExpenseAction(token, expenseId);
+              return true;
+            } catch (err) {
+              console.warn("Error deleting expense in Supabase, falling back to LocalStorage:", err);
+              const expenses = getStorageItem('expenses', initialExpenses);
+              const filtered = expenses.filter((e: any) => e.id !== expenseId);
+              setStorageItem('expenses', filtered);
+              return true;
+            }
       }
-    } else {
-      const expenses = getStorageItem('expenses', initialExpenses);
-      const filtered = expenses.filter((e: any) => e.id !== expenseId);
-      setStorageItem('expenses', filtered);
-      return true;
-    }
   },
 
   updateExpense: async (expenseId: string, updates: Partial<BusinessExpense>): Promise<BusinessExpense> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const dbUpdates: any = {};
-        if (updates.expense_name !== undefined) dbUpdates.description = updates.expense_name;
-        if (updates.amount !== undefined) dbUpdates.amount = updates.amount;
-        if (updates.category !== undefined) dbUpdates.category = updates.category;
-        if (updates.expense_date !== undefined) dbUpdates.expense_date = updates.expense_date;
-        if (updates.attachment_size_bytes !== undefined) dbUpdates.attachment_size_bytes = updates.attachment_size_bytes;
-        if (updates.bill_attachments !== undefined) dbUpdates.bill_attachments = updates.bill_attachments;
+              const token = await getAuthToken();
+              const dbUpdates: any = {};
+              if (updates.expense_name !== undefined) dbUpdates.description = updates.expense_name;
+              if (updates.amount !== undefined) dbUpdates.amount = updates.amount;
+              if (updates.category !== undefined) dbUpdates.category = updates.category;
+              if (updates.expense_date !== undefined) dbUpdates.expense_date = updates.expense_date;
+              if (updates.attachment_size_bytes !== undefined) dbUpdates.attachment_size_bytes = updates.attachment_size_bytes;
+              if (updates.bill_attachments !== undefined) dbUpdates.bill_attachments = updates.bill_attachments;
 
-        const data = await updateExpenseAction(token, expenseId, dbUpdates);
-        return {
-          id: data.id,
-          tenant_id: data.tenant_id,
-          expense_name: data.description || data.expense_name || '',
-          amount: Number(data.amount),
-          category: data.category,
-          expense_date: data.expense_date,
-          attachment_size_bytes: Number(data.attachment_size_bytes || 0),
-          bill_attachments: data.bill_attachments || [],
-        };
-      } catch (err) {
-        console.warn("Error updating expense in Supabase, falling back to LocalStorage:", err);
-        const expenses = getStorageItem('expenses', initialExpenses);
-        const idx = expenses.findIndex((e: any) => e.id === expenseId);
-        if (idx !== -1) {
-          expenses[idx] = { ...expenses[idx], ...updates };
-          setStorageItem('expenses', expenses);
-        }
-        return expenses.find((e: any) => e.id === expenseId) || (updates as any);
+              const data = await updateExpenseAction(token, expenseId, dbUpdates);
+              return {
+                id: data.id,
+                tenant_id: data.tenant_id,
+                expense_name: data.description || data.expense_name || '',
+                amount: Number(data.amount),
+                category: data.category,
+                expense_date: data.expense_date,
+                attachment_size_bytes: Number(data.attachment_size_bytes || 0),
+                bill_attachments: data.bill_attachments || [],
+              };
+            } catch (err) {
+              console.warn("Error updating expense in Supabase, falling back to LocalStorage:", err);
+              const expenses = getStorageItem('expenses', initialExpenses);
+              const idx = expenses.findIndex((e: any) => e.id === expenseId);
+              if (idx !== -1) {
+                expenses[idx] = { ...expenses[idx], ...updates };
+                setStorageItem('expenses', expenses);
+              }
+              return expenses.find((e: any) => e.id === expenseId) || (updates as any);
+            }
       }
-    } else {
-      const expenses = getStorageItem('expenses', initialExpenses);
-      const idx = expenses.findIndex((e: any) => e.id === expenseId);
-      if (idx !== -1) {
-        expenses[idx] = { ...expenses[idx], ...updates };
-        setStorageItem('expenses', expenses);
-      }
-      return expenses.find((e: any) => e.id === expenseId) || (updates as any);
-    }
   },
 
   // AUDIT TRAILS
   getAuditTrails: async (): Promise<SystemAuditTrail[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const data = await getAuditTrailsAction(token);
-        return (data || []).map((row: any) => ({
-          id: row.id,
-          tenant_id: row.tenant_id,
-          action_type: row.action_type,
-          description: row.metadata?.description || row.resource_affected || 'No description provided',
-          performed_by: row.performer?.full_name || row.performer?.email || 'System / Unknown',
-          created_at: row.timestamp || new Date().toISOString()
-        }));
-      } catch (err) {
-        console.warn("Error in getAuditTrails, falling back to LocalStorage:", err);
-        return getStorageItem('audit_trails', initialAuditTrails);
+              const token = await getAuthToken();
+              const data = await getAuditTrailsAction(token);
+              return (data || []).map((row: any) => ({
+                id: row.id,
+                tenant_id: row.tenant_id,
+                action_type: row.action_type,
+                description: row.metadata?.description || row.resource_affected || 'No description provided',
+                performed_by: row.performer?.full_name || row.performer?.email || 'System / Unknown',
+                created_at: row.timestamp || new Date().toISOString()
+              }));
+            } catch (err) {
+              console.warn("Error in getAuditTrails, falling back to LocalStorage:", err);
+              return getStorageItem('audit_trails', initialAuditTrails);
+            }
       }
-    } else {
-      return getStorageItem('audit_trails', initialAuditTrails);
-    }
   },
 
   addAuditTrail: async (actionType: SystemAuditTrail['action_type'], description: string): Promise<void> => {
@@ -1518,61 +1236,44 @@ export const dataService = {
       console.warn("Failed to load current user for audit trail:", e);
     }
 
-    if (isSupabaseConfigured && supabase) {
+    {
       const dbRow = {
-        id: generateUUID(),
-        tenant_id: tenant.id,
-        performer_id: currentUserId,
-        action_type: actionType,
-        resource_affected: description.substring(0, 100) || 'System',
-        metadata: { description },
-      };
-      
+              id: generateUUID(),
+              tenant_id: tenant.id,
+              performer_id: currentUserId,
+              action_type: actionType,
+              resource_affected: description.substring(0, 100) || 'System',
+              metadata: { description },
+            };
       try {
-        const token = await getAuthToken();
-        await addAuditTrailAction(token, dbRow);
-      } catch (err: any) {
-        console.error("Failed to insert audit trail into Supabase system_audit_trails. Error message: " + err.message);
+              const token = await getAuthToken();
+              await addAuditTrailAction(token, dbRow);
+            } catch (err: any) {
+              console.error("Failed to insert audit trail into Supabase system_audit_trails. Error message: " + err.message);
+            }
       }
-    } else {
-      const newTrail: SystemAuditTrail = {
-        id: generateUUID(),
-        tenant_id: tenant.id,
-        action_type: actionType,
-        description,
-        performed_by: currentUserEmail,
-        created_at: new Date().toISOString(),
-      };
-      const trails = getStorageItem('audit_trails', initialAuditTrails);
-      trails.unshift(newTrail);
-      setStorageItem('audit_trails', trails);
-    }
   },
 
   truncateAuditTrails: async (): Promise<void> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       await truncateAuditTrailsAction(token);
-    } else {
-      setStorageItem('audit_trails', []);
-    }
+      }
     await dataService.addAuditTrail('FINANCIAL_MUTATION', 'Cleared entire system audit log');
   },
 
   // TODO TASKS
   getTodoTasks: async (): Promise<TodoTask[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const data = await getTodoTasksAction(token);
-        return (data || []).map(mapTodoTaskFromDb);
-      } catch (err) {
-        console.warn("Error in getTodoTasks, falling back to LocalStorage:", err);
-        return getStorageItem('todo_tasks', initialTodoTasks);
+              const token = await getAuthToken();
+              const data = await getTodoTasksAction(token);
+              return (data || []).map(mapTodoTaskFromDb);
+            } catch (err) {
+              console.warn("Error in getTodoTasks, falling back to LocalStorage:", err);
+              return getStorageItem('todo_tasks', initialTodoTasks);
+            }
       }
-    } else {
-      return getStorageItem('todo_tasks', initialTodoTasks);
-    }
   },
 
   addTodoTask: async (task: Omit<TodoTask, 'id' | 'tenant_id' | 'status' | 'created_at'>): Promise<TodoTask> => {
@@ -1586,34 +1287,28 @@ export const dataService = {
     };
 
     let createdTask: TodoTask;
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const dbPayload = {
-          id: newTask.id,
-          tenant_id: newTask.tenant_id,
-          status: 'pending',
-          assignee_id: newTask.assigned_to,
-          creator_id: newTask.created_by,
-          task_body: newTask.title + (newTask.description ? ' | ' + newTask.description : ''),
-        };
-        const token = await getAuthToken();
-        const data = await addTodoTaskAction(token, dbPayload);
-        createdTask = mapTodoTaskFromDb(data);
-      } catch (err) {
-        console.warn("Error inserting task to Supabase, falling back to LocalStorage:", err);
-        const tasks = getStorageItem('todo_tasks', initialTodoTasks);
-        tasks.push(newTask);
-        setStorageItem('todo_tasks', tasks);
-        notifySubscribers('todo_tasks', 'INSERT', newTask);
-        createdTask = newTask;
+              const dbPayload = {
+                id: newTask.id,
+                tenant_id: newTask.tenant_id,
+                status: 'pending',
+                assignee_id: newTask.assigned_to,
+                creator_id: newTask.created_by,
+                task_body: newTask.title + (newTask.description ? ' | ' + newTask.description : ''),
+              };
+              const token = await getAuthToken();
+              const data = await addTodoTaskAction(token, dbPayload);
+              createdTask = mapTodoTaskFromDb(data);
+            } catch (err) {
+              console.warn("Error inserting task to Supabase, falling back to LocalStorage:", err);
+              const tasks = getStorageItem('todo_tasks', initialTodoTasks);
+              tasks.push(newTask);
+              setStorageItem('todo_tasks', tasks);
+              notifySubscribers('todo_tasks', 'INSERT', newTask);
+              createdTask = newTask;
+            }
       }
-    } else {
-      const tasks = getStorageItem('todo_tasks', initialTodoTasks);
-      tasks.push(newTask);
-      setStorageItem('todo_tasks', tasks);
-      notifySubscribers('todo_tasks', 'INSERT', newTask);
-      createdTask = newTask;
-    }
 
     if (createdTask.assigned_to) {
       try {
@@ -1649,81 +1344,60 @@ export const dataService = {
   },
 
   toggleTodoTask: async (taskId: string): Promise<TodoTask> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const tasks = await getTodoTasksAction(token);
-        const current = tasks.find((t: any) => t.id === taskId);
-        const nextStatus = current?.status.toLowerCase() === 'completed' ? 'pending' : 'completed';
-        const data = await updateTodoTaskStatusAction(token, taskId, nextStatus);
-        return mapTodoTaskFromDb(data);
-      } catch (err) {
-        console.warn("Failed to toggle task status in Supabase, falling back to LocalStorage:", err);
-        const tasks = getStorageItem('todo_tasks', initialTodoTasks);
-        const idx = tasks.findIndex((t) => t.id === taskId);
-        if (idx !== -1) {
-          tasks[idx].status = tasks[idx].status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
-          setStorageItem('todo_tasks', tasks);
-          notifySubscribers('todo_tasks', 'UPDATE', tasks[idx]);
-          return tasks[idx];
-        }
-        throw new Error('Task not found in LocalStorage');
+              const token = await getAuthToken();
+              const tasks = await getTodoTasksAction(token);
+              const current = tasks.find((t: any) => t.id === taskId);
+              const nextStatus = current?.status.toLowerCase() === 'completed' ? 'pending' : 'completed';
+              const data = await updateTodoTaskStatusAction(token, taskId, nextStatus);
+              return mapTodoTaskFromDb(data);
+            } catch (err) {
+              console.warn("Failed to toggle task status in Supabase, falling back to LocalStorage:", err);
+              const tasks = getStorageItem('todo_tasks', initialTodoTasks);
+              const idx = tasks.findIndex((t) => t.id === taskId);
+              if (idx !== -1) {
+                tasks[idx].status = tasks[idx].status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
+                setStorageItem('todo_tasks', tasks);
+                notifySubscribers('todo_tasks', 'UPDATE', tasks[idx]);
+                return tasks[idx];
+              }
+              throw new Error('Task not found in LocalStorage');
+            }
       }
-    } else {
-      const tasks = getStorageItem('todo_tasks', initialTodoTasks);
-      const idx = tasks.findIndex((t) => t.id === taskId);
-      if (idx !== -1) {
-        tasks[idx].status = tasks[idx].status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
-        setStorageItem('todo_tasks', tasks);
-        notifySubscribers('todo_tasks', 'UPDATE', tasks[idx]);
-        return tasks[idx];
-      }
-      throw new Error('Task not found');
-    }
   },
 
   wipeCompletedTasks: async (): Promise<void> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        await wipeCompletedTasksAction(token);
-      } catch (err) {
-        console.warn("Failed to wipe completed tasks in Supabase, falling back to LocalStorage:", err);
-        const tasks = getStorageItem('todo_tasks', initialTodoTasks);
-        const remaining = tasks.filter((t) => t.status !== 'COMPLETED');
-        setStorageItem('todo_tasks', remaining);
-        notifySubscribers('todo_tasks', 'DELETE', { id: 'all' });
+              const token = await getAuthToken();
+              await wipeCompletedTasksAction(token);
+            } catch (err) {
+              console.warn("Failed to wipe completed tasks in Supabase, falling back to LocalStorage:", err);
+              const tasks = getStorageItem('todo_tasks', initialTodoTasks);
+              const remaining = tasks.filter((t) => t.status !== 'COMPLETED');
+              setStorageItem('todo_tasks', remaining);
+              notifySubscribers('todo_tasks', 'DELETE', { id: 'all' });
+            }
       }
-    } else {
-      const tasks = getStorageItem('todo_tasks', initialTodoTasks);
-      const remaining = tasks.filter((t) => t.status !== 'COMPLETED');
-      setStorageItem('todo_tasks', remaining);
-      notifySubscribers('todo_tasks', 'DELETE', { id: 'all' });
-    }
   },
 
   // SCHEDULED SESSIONS (APPOINTMENTS)
   getScheduledSessions: async (): Promise<ScheduledSession[]> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const data = await getScheduledSessionsAction(token);
-        return (data || []).map((session: any) => ({
-          ...session,
-          status: session.status || 'scheduled',
-          session_notes: session.next_session_notes || session.session_notes || ''
-        }));
-      } catch (err) {
-        console.warn("Error fetching scheduled sessions from Supabase, falling back to LocalStorage:", err);
-        return getStorageItem('scheduled_sessions', initialScheduledSessions);
+              const token = await getAuthToken();
+              const data = await getScheduledSessionsAction(token);
+              return (data || []).map((session: any) => ({
+                ...session,
+                status: session.status || 'scheduled',
+                session_notes: session.next_session_notes || session.session_notes || ''
+              }));
+            } catch (err) {
+              console.warn("Error fetching scheduled sessions from Supabase, falling back to LocalStorage:", err);
+              return getStorageItem('scheduled_sessions', initialScheduledSessions);
+            }
       }
-    } else {
-      const mockSessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
-      return mockSessions.map((s) => ({
-        ...s,
-        status: s.status || 'scheduled',
-      }));
-    }
   },
 
   addScheduledSession: async (session: Omit<ScheduledSession, 'id' | 'tenant_id' | 'created_at'>): Promise<ScheduledSession> => {
@@ -1774,33 +1448,20 @@ export const dataService = {
     };
 
     let createdSession: ScheduledSession;
-    if (isSupabaseConfigured && supabase) {
+    {
       dbPayload.next_session_notes = session.session_notes;
       try {
-        const token = await getAuthToken();
-        const data = await addScheduledSessionAction(token, dbPayload);
-        createdSession = {
-          ...data,
-          session_notes: data.next_session_notes || data.session_notes || ''
-        };
-      } catch (err) {
-        console.error("Error inserting scheduled session to Supabase:", err);
-        throw err;
+              const token = await getAuthToken();
+              const data = await addScheduledSessionAction(token, dbPayload);
+              createdSession = {
+                ...data,
+                session_notes: data.next_session_notes || data.session_notes || ''
+              };
+            } catch (err) {
+              console.error("Error inserting scheduled session to Supabase:", err);
+              throw err;
+            }
       }
-    } else {
-      const newSession: ScheduledSession = {
-        ...session,
-        id: dbPayload.id,
-        tenant_id: dbPayload.tenant_id,
-        status: dbPayload.status,
-        created_at: dbPayload.created_at,
-      };
-      const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
-      sessions.push(newSession);
-      setStorageItem('scheduled_sessions', sessions);
-      notifySubscribers('scheduled_sessions', 'INSERT', newSession);
-      createdSession = newSession;
-    }
 
     if (createdSession.practitioner_id) {
       try {
@@ -1827,66 +1488,51 @@ export const dataService = {
   },
 
   updateScheduledSessionStatus: async (sessionId: string, status: 'scheduled' | 'completed' | 'cancelled'): Promise<ScheduledSession> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       const data = await updateScheduledSessionStatusAction(token, sessionId, status);
       return {
-        ...data,
-        session_notes: data.next_session_notes || data.session_notes || ''
-      };
-    } else {
-      const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
-      const idx = sessions.findIndex((s) => s.id === sessionId);
-      if (idx !== -1) {
-        sessions[idx].status = status;
-        setStorageItem('scheduled_sessions', sessions);
-        notifySubscribers('scheduled_sessions', 'UPDATE', sessions[idx]);
-        return sessions[idx];
+              ...data,
+              session_notes: data.next_session_notes || data.session_notes || ''
+            };
       }
-      throw new Error('Session not found');
-    }
   },
 
   deleteScheduledSession: async (sessionId: string): Promise<void> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        await deleteScheduledSessionAction(token, sessionId);
-      } catch (err) {
-        console.error("Failed to delete scheduled session in Supabase:", err);
-        throw err;
+              const token = await getAuthToken();
+              await deleteScheduledSessionAction(token, sessionId);
+            } catch (err) {
+              console.error("Failed to delete scheduled session in Supabase:", err);
+              throw err;
+            }
       }
-    } else {
-      const sessions = getStorageItem('scheduled_sessions', initialScheduledSessions);
-      const remaining = sessions.filter((s) => s.id !== sessionId);
-      setStorageItem('scheduled_sessions', remaining);
-      notifySubscribers('scheduled_sessions', 'DELETE', { id: sessionId });
-    }
   },
 
   // DATABASE VIEW RECONCILIATION - TENANT RESOURCE METRICS
   getTenantResourceMetrics: async () => {
     const tenant = await dataService.getTenant();
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const token = await getAuthToken();
-        const data = await getTenantResourceMetricsAction(token, tenant.id);
-        if (data) {
-          // Convert estimated_database_storage_bytes and total_file_storage_bytes to MB
-          const dbUsed = Number(data.estimated_database_storage_bytes || 0) / (1024 * 1024);
-          const fileUsed = Number(data.total_file_storage_bytes || 0) / (1024 * 1024);
-          
-          return {
-            max_db_storage_mb: Number(tenant.max_db_storage_mb || 50),
-            max_file_storage_mb: Number(tenant.max_file_storage_mb || 200),
-            used_db_storage_mb: parseFloat(dbUsed.toFixed(3)),
-            used_file_storage_mb: parseFloat(fileUsed.toFixed(3)),
-          };
-        }
-      } catch (err) {
-        console.warn("Failed to read resource metrics from Supabase view, falling back to mock calculations:", err);
+              const token = await getAuthToken();
+              const data = await getTenantResourceMetricsAction(token, tenant.id);
+              if (data) {
+                // Convert estimated_database_storage_bytes and total_file_storage_bytes to MB
+                const dbUsed = Number(data.estimated_database_storage_bytes || 0) / (1024 * 1024);
+                const fileUsed = Number(data.total_file_storage_bytes || 0) / (1024 * 1024);
+                
+                return {
+                  max_db_storage_mb: Number(tenant.max_db_storage_mb || 50),
+                  max_file_storage_mb: Number(tenant.max_file_storage_mb || 200),
+                  used_db_storage_mb: parseFloat(dbUsed.toFixed(3)),
+                  used_file_storage_mb: parseFloat(fileUsed.toFixed(3)),
+                };
+              }
+            } catch (err) {
+              console.warn("Failed to read resource metrics from Supabase view, falling back to mock calculations:", err);
+            }
       }
-    }
 
     // Dynamic Mock Calculations
     let patientsCount = 0;
@@ -1939,18 +1585,18 @@ export const dataService = {
     let staff: User | undefined;
     let sessions: ScheduledSession[] = [];
 
-    if (isSupabaseConfigured && supabase) {
+    {
       try {
-        const users = await dataService.getUsers();
-        const userData = users.find(u => u.id === staffId);
-        if (userData) {
-          staff = userData;
-        }
-        sessions = await dataService.getScheduledSessions();
-      } catch (err) {
-        console.warn("Failed to fetch payout data from Supabase, falling back to LocalStorage:", err);
+              const users = await dataService.getUsers();
+              const userData = users.find(u => u.id === staffId);
+              if (userData) {
+                staff = userData;
+              }
+              sessions = await dataService.getScheduledSessions();
+            } catch (err) {
+              console.warn("Failed to fetch payout data from Supabase, falling back to LocalStorage:", err);
+            }
       }
-    }
 
     if (!staff) {
       const users = getStorageItem('users', initialUsers);
@@ -2049,25 +1695,20 @@ export const dataService = {
     // 2. Create First Admin User
     let adminId = generateUUID();
 
-    if (isSupabaseConfigured && supabase) {
-      // Try to sign up user in Supabase Auth first
+    {
       if (!onboardingData.admin_password) {
-        throw new Error('Admin password is required to initialize a clinic under Supabase.');
-      }
-      
+              throw new Error('Admin password is required to initialize a clinic under Supabase.');
+            }
       const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: onboardingData.admin_email,
-        password: onboardingData.admin_password,
-      });
-
+              email: onboardingData.admin_email,
+              password: onboardingData.admin_password,
+            });
       if (authErr) throw authErr;
       if (!authData.user) {
-        throw new Error('Supabase Auth failed to return user data.');
-      }
-      
-      // Use the official Supabase Auth user ID as the public.users record ID
+              throw new Error('Supabase Auth failed to return user data.');
+            }
       adminId = authData.user.id;
-    }
+      }
 
     const firstAdmin: User & { password?: string } = {
       id: adminId,
@@ -2086,46 +1727,9 @@ export const dataService = {
       resource_fhir: { resourceType: 'Practitioner', active: true, name: [{ text: onboardingData.admin_name }] },
     };
 
-    if (isSupabaseConfigured && supabase) {
-      // Insert tenant and then insert public.users row via server action
+    {
       await initializeTenantAction(newTenant, firstAdmin);
-    } else {
-      // Mock reset with new tenant
-      setStorageItem('tenant', newTenant);
-      
-      // Seed password in user record for offline login mock verification
-      if (onboardingData.admin_password) {
-        firstAdmin.password = onboardingData.admin_password;
       }
-      setStorageItem('users', [firstAdmin]);
-
-      // Auto-authenticate mock admin session
-      localStorage.setItem('zenith_session', JSON.stringify({
-        email: onboardingData.admin_email.toLowerCase(),
-        loggedIn: true,
-      }));
-      
-      // Seed an empty/cleared baseline for this tenant
-      setStorageItem('patients', []);
-      setStorageItem('clinical_logs', []);
-      setStorageItem('invoices', []);
-      setStorageItem('inventory', initialInventory); // Keep standard products list
-      setStorageItem('expenses', []);
-      setStorageItem('todo_tasks', []);
-      setStorageItem('scheduled_sessions', []);
-      
-      const setupTrails: SystemAuditTrail[] = [
-        {
-          id: generateUUID(),
-          tenant_id: tenantId,
-          action_type: 'CONSENT_CHANGED',
-          description: `Initialized Clinic Tenant and set DPDP Processing Consent: ${onboardingData.consent_given ? 'Granted' : 'Pending'}`,
-          performed_by: onboardingData.admin_name,
-          created_at: new Date().toISOString(),
-        }
-      ];
-      setStorageItem('audit_trails', setupTrails);
-    }
 
     return newTenant;
   },
@@ -2142,36 +1746,12 @@ export const dataService = {
       admin_name: string;
     }
   ): Promise<void> => {
-    if (isSupabaseConfigured && supabase) {
+    {
       const token = await getAuthToken();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) throw new Error("No active user session found.");
       await completeOnboardingAction(token, tenantId, onboardingData, userData.user.id);
-    } else {
-      // Mock mode completion
-      const tenant = getStorageItem('tenant', initialTenant);
-      const updatedTenant = {
-        ...tenant,
-        business_name: onboardingData.business_name,
-        business_type: onboardingData.business_type,
-        clinic_start_time: onboardingData.clinic_start_time,
-        clinic_end_time: onboardingData.clinic_end_time,
-        max_db_storage_mb: onboardingData.max_db_storage_mb,
-        max_file_storage_mb: onboardingData.max_file_storage_mb,
-      };
-      setStorageItem('tenant', updatedTenant);
-
-      const users = getStorageItem('users', initialUsers);
-      if (users.length > 0) {
-        users[0].full_name = onboardingData.admin_name;
-        users[0].resource_fhir = {
-          resourceType: 'Practitioner',
-          active: true,
-          name: [{ text: onboardingData.admin_name }]
-        };
-        setStorageItem('users', users);
       }
-    }
   },
 
   // NOTIFICATIONS
@@ -2194,21 +1774,38 @@ export const dataService = {
     };
     all.unshift(newNotification);
     setStorageItem('notifications', all);
-    notifySubscribers('notifications', 'INSERT', newNotification);
     return newNotification;
   },
 
-  clearNotifications: async (userId: string): Promise<void> => {
-    const all = getStorageItem('notifications', [] as SystemNotification[]);
-    const remaining = all.filter((n: any) => n.user_id !== userId);
-    setStorageItem('notifications', remaining);
-    notifySubscribers('notifications', 'DELETE', { id: 'all_user_' + userId });
-  },
+  clearNotifications: async (userId: string): Promise<void> => {},
 
-  markNotificationsRead: async (userId: string): Promise<void> => {
-    const all = getStorageItem('notifications', [] as SystemNotification[]);
-    const updated = all.map((n: any) => n.user_id === userId ? { ...n, is_read: true } : n);
-    setStorageItem('notifications', updated);
-    notifySubscribers('notifications', 'UPDATE', { id: 'all_user_' + userId });
-  },
+  markNotificationsRead: async (userId: string): Promise<void> => {},
+
+  // SERVICES STUBS
+  getServices: async (): Promise<any[]> => [],
+  addService: async (s: any): Promise<any> => s,
+  deleteService: async (id: string): Promise<void> => {},
+
+  // ATTENDANCE STUBS
+  getAttendance: async (): Promise<any[]> => [],
+  markAttendance: async (a: any): Promise<any> => a,
+  markAttendanceQR: async (a: any): Promise<any> => a,
+
+  // TODO TASKS STUBS
+  deleteTodoTask: async (id: string): Promise<void> => {},
+
+  // CLINICAL LOGS
+  softDeleteClinicalLog: async (id: string): Promise<void> => {},
 };
+
+export interface Attendance {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  date: string;
+  check_in: string;
+  check_out?: string;
+  status: 'PRESENT' | 'ABSENT' | 'LATE';
+  mode: 'QR' | 'MANUAL';
+  notes?: string;
+}

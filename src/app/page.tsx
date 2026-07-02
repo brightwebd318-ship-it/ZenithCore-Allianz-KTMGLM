@@ -15,6 +15,7 @@ import { SalaryView } from '../views/SalaryView';
 import { ReportsView } from '../views/ReportsView';
 import { TasksView } from '../views/TasksView';
 import { AdminControlsView } from '../views/AdminControlsView';
+import { AttendanceView } from '../views/AttendanceView';
 import { dataService } from '../services/dataService';
 import type { Tenant, User } from '../services/dataService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
@@ -29,39 +30,19 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
-  const [darkMode, setDarkMode] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Deep-linking Target States
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
 
-  // Load theme preference on mount
+  // Always enforce light mode and clean up any dark preferences
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('zenith_theme');
-      if (savedTheme === 'dark') {
-        setDarkMode(true);
-      } else if (!savedTheme) {
-        // Default to dark theme if user prefers system dark mode
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        setDarkMode(prefersDark);
-      }
+      localStorage.removeItem('zenith_theme');
+      document.documentElement.classList.remove('dark');
     }
   }, []);
-
-  // Sync theme with HTML class
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if (darkMode) {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('zenith_theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('zenith_theme', 'light');
-      }
-    }
-  }, [darkMode]);
 
   // Check session on mount
   useEffect(() => {
@@ -150,9 +131,7 @@ export default function Home() {
         }
       };
 
-      const enabledTabsRaw = currentUser.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser.position_role);
-      const hasPatientsAccess = currentUser.can_view_personal_data && currentUser.can_view_medical_history;
-      const enabledTabs = hasPatientsAccess ? enabledTabsRaw : enabledTabsRaw.filter((t: string) => t !== 'Patients');
+      const enabledTabs = currentUser.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser.position_role);
       
       if (!enabledTabs.includes(activeTab) && activeTab !== 'Administrative Controls') {
         if (enabledTabs.length > 0) {
@@ -264,12 +243,21 @@ export default function Home() {
           <ReportsView
             triggerRefresh={triggerRefresh}
             triggerRefreshKey={refreshKey}
+            currentUser={currentUser}
           />
         );
       case 'Administrative Controls':
         return (
           <AdminControlsView
             triggerRefresh={triggerRefresh}
+          />
+        );
+      case 'Attendance':
+        return (
+          <AttendanceView
+            triggerRefresh={triggerRefresh}
+            triggerRefreshKey={refreshKey}
+            currentUser={currentUser}
           />
         );
       default:
@@ -322,8 +310,6 @@ export default function Home() {
         setActiveTab={setActiveTab}
         tenant={tenant}
         onLogout={handleLogout}
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
         currentUser={currentUser}
         onNavigateToTask={(id) => setSelectedTaskId(id)}
         onNavigateToAppointment={(id) => setSelectedAppointmentId(id)}

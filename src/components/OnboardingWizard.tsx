@@ -40,7 +40,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   const [tier, setTier] = useState<'Standard' | 'Premium'>('Standard'); // Standard: 50MB DB, 200MB Files. Premium: 250MB DB, 1GB Files.
 
   const [dpdpConsent, setDpdpConsent] = useState(true);
-  const [gstEnabled, setGstEnabled] = useState(true);
+  const [gstEnabled, setGstEnabled] = useState(false);
 
   const [adminName, setAdminName] = useState(isFirstTimeSetup ? '' : 'Dibin');
   const [adminEmail, setAdminEmail] = useState(isFirstTimeSetup ? '' : 'dibin.head@nirvana.com');

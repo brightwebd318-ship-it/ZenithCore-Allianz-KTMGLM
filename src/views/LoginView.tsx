@@ -216,7 +216,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         <img 
           src="/praxdoc_logo.png" 
           alt="PraxDoc Logo" 
-          className="h-14 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity"
+          className="h-44 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity"
         />
       </div>
     </div>

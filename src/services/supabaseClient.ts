@@ -6,12 +6,10 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
-
 if (!isSupabaseConfigured) {
-  console.warn(
-    'Supabase URL and/or Anon Key are missing. ZenithCore Medical SaaS will run in High-Fidelity Local Mock Mode.'
+  throw new Error(
+    'CRITICAL ERROR: Supabase URL and/or Anon Key are missing. ZenithCore Medical SaaS requires a database connection to operate securely.'
   );
 }
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

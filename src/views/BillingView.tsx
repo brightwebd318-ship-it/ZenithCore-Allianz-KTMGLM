@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CreditCard, Eye, Plus, FileText, UserCheck } from 'lucide-react';
+import { CreditCard, Eye, Plus, FileText, UserCheck, Calendar, Search } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { Invoice, Patient, User as StaffUser, InventoryItem } from '../services/dataService';
 
@@ -17,8 +17,17 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   // Form States
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState('');
-  const [sessionsCount, setSessionsCount] = useState(0);
+  const [sessionsCount, setSessionsCount] = useState<number | ''>(0);
   const [ratePerSession, setRatePerSession] = useState(1200);
+
+  // Services Catalog list
+  const [services, setServices] = useState<any[]>([]);
+  const [selectedServiceId, setSelectedServiceId] = useState('custom');
+
+  // Ledger Filter states
+  const [ledgerDateFilter, setLedgerDateFilter] = useState(() => {
+    return new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+  });
 
   // Custom manual entries state
   const [customItems, setCustomItems] = useState<Array<{ id: string; name: string; quantity: number; rate: number; inventoryId?: string }>>([]);
@@ -41,24 +50,27 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
   const loadBillingData = async () => {
     try {
-      const invs = await dataService.getInvoices();
+      const invs = await dataService.getInvoices(ledgerDateFilter || undefined);
       setInvoices(invs);
       
       const pts = await dataService.getPatients();
       setPatients(pts);
-      if (pts.length > 0) {
+      if (pts.length > 0 && !selectedPatientId) {
         setSelectedPatientId(pts[0].id);
         setSelectedPatient(pts[0]);
       }
 
       const st = await dataService.getUsers();
       setStaff(st);
-      if (st.length > 0) {
+      if (st.length > 0 && !selectedStaffId) {
         setSelectedStaffId(st[0].id);
       }
 
       const invItems = await dataService.getInventory();
       setInventory(invItems);
+
+      const srvs = await dataService.getServices();
+      setServices(srvs);
     } catch (err) {
       console.error('Failed to load billing data:', err);
     } finally {
@@ -68,7 +80,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
   useEffect(() => {
     loadBillingData();
-  }, [triggerRefreshKey]);
+  }, [triggerRefreshKey, ledgerDateFilter]);
 
   // Update selected patient metadata dynamically
   useEffect(() => {
@@ -106,7 +118,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
     if (!selectedPatientId || !selectedStaffId) return;
 
     try {
-      const sessionsCost = sessionsCount * ratePerSession;
+      const actualSessionsCount = sessionsCount === '' ? 0 : sessionsCount;
+      const sessionsCost = actualSessionsCount * ratePerSession;
       const customCost = customItems.reduce((sum, item) => sum + item.quantity * item.rate, 0);
       const baseAmount = sessionsCost + customCost;
       const applyGst = selectedPatient ? selectedPatient.gst_enabled : false;
@@ -122,17 +135,23 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
         }
       }
 
+      const selectedService = services.find(s => s.id === selectedServiceId);
+      const sessionDescription = selectedService ? selectedService.name : 'Therapy Session Units';
+
       const newInv = await dataService.addInvoice(
         selectedPatientId,
-        sessionsCount,
+        actualSessionsCount,
         selectedStaffId,
         applyGst,
         baseAmount,
-        customItems.map(item => ({ name: item.name, quantity: item.quantity, rate: item.rate }))
+        customItems.map(item => ({ name: item.name, quantity: item.quantity, rate: item.rate })),
+        sessionDescription
       );
 
       // Reset
       setCustomItems([]);
+      setSessionsCount(0);
+      setSelectedServiceId('custom');
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Generated new invoice ledger trace for patient ID: ${selectedPatientId}`);
       
       // Open print overlay
@@ -164,7 +183,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
 
   // Live Calculations for Preview card
-  const sessionsCost = sessionsCount * ratePerSession;
+  const actualSessionsCount = sessionsCount === '' ? 0 : sessionsCount;
+  const sessionsCost = actualSessionsCount * ratePerSession;
   const customCost = customItems.reduce((sum, item) => sum + item.quantity * item.rate, 0);
   const basePreviewAmount = sessionsCost + customCost;
   const isGstActive = selectedPatient ? selectedPatient.gst_enabled : false;
@@ -218,6 +238,34 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                 </select>
               </div>
 
+              {/* Service Dropdown */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Service</label>
+                <select
+                  value={selectedServiceId}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedServiceId(val);
+                    if (val === 'custom') {
+                      // Keep custom rate or set a baseline
+                    } else {
+                      const srv = services.find(s => s.id === val);
+                      if (srv) {
+                        setRatePerSession(srv.price);
+                      }
+                    }
+                  }}
+                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                >
+                  <option value="custom">-- Custom Session / Rate --</option>
+                  {services.map((srv) => (
+                    <option key={srv.id} value={srv.id}>
+                      {srv.name} (₹{srv.price})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Session Count</label>
@@ -226,7 +274,14 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                     min={0}
                     max={100}
                     value={sessionsCount}
-                    onChange={(e) => setSessionsCount(parseInt(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setSessionsCount('');
+                      } else {
+                        setSessionsCount(parseInt(val) || 0);
+                      }
+                    }}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                   />
                 </div>
@@ -234,7 +289,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rate Per Session (₹)</label>
                   <input
                     type="number"
-                    min={100}
+                    min={0}
                     value={ratePerSession}
                     onChange={(e) => setRatePerSession(parseInt(e.target.value) || 0)}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
@@ -403,9 +458,29 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
       {/* Invoice Ledger Table (Matching Layout in user mockup) */}
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
-          <FileText className="h-4 w-4 mr-2 text-brand-500" /> Invoice Ledger
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 dark:border-slate-800 space-y-2 sm:space-y-0">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center">
+            <FileText className="h-4 w-4 mr-2 text-brand-500" /> Invoice Ledger
+          </h3>
+          
+          <div className="flex items-center space-x-2">
+            <Calendar className="h-4 w-4 text-slate-400" />
+            <input
+              type="date"
+              value={ledgerDateFilter}
+              onChange={(e) => setLedgerDateFilter(e.target.value)}
+              className="rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+            />
+            {ledgerDateFilter && (
+              <button
+                onClick={() => setLedgerDateFilter('')}
+                className="text-xs text-brand-500 hover:text-brand-650 font-bold"
+              >
+                Show All
+              </button>
+            )}
+          </div>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">

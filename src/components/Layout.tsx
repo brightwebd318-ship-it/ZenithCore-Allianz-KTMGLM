@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -21,7 +21,10 @@ import {
   Stethoscope,
   Plus,
   CheckSquare,
-  Banknote
+  Banknote,
+  Clock,
+  Menu,
+  X
 } from 'lucide-react';
 import { dataService, subscribeToTable } from '../services/dataService';
 import type { Tenant, User, SystemNotification } from '../services/dataService';
@@ -31,6 +34,7 @@ export type TabType =
   | 'Patients'
   | 'Appointments'
   | 'Tasks'
+  | 'Attendance'
   | 'Billing'
   | 'Inventory'
   | 'Staff'
@@ -44,8 +48,6 @@ interface LayoutProps {
   setActiveTab: (tab: TabType) => void;
   tenant: Tenant | null;
   onLogout: () => void;
-  darkMode: boolean;
-  setDarkMode: (dark: boolean) => void;
   currentUser: User | null;
   onNavigateToTask?: (id: string) => void;
   onNavigateToAppointment?: (id: string) => void;
@@ -57,16 +59,33 @@ export const Layout: React.FC<LayoutProps> = ({
   setActiveTab,
   tenant,
   onLogout,
-  darkMode,
-  setDarkMode,
   currentUser,
   onNavigateToTask,
   onNavigateToAppointment,
 }) => {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
   const [logoConfig, setLogoConfig] = useState<{type: string; preset?: string; url?: string}>({ type: 'preset', preset: 'blue' });
+
+  const profileRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setProfileOpen(false);
+      }
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const loadNotificationsAndBranding = async () => {
     if (currentUser?.id) {
@@ -194,9 +213,7 @@ export const Layout: React.FC<LayoutProps> = ({
     }
   };
 
-  const enabledTabsRaw = currentUser?.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser?.position_role || '');
-  const hasPatientsAccess = currentUser ? (currentUser.can_view_personal_data && currentUser.can_view_medical_history) : true;
-  const enabledTabs = hasPatientsAccess ? enabledTabsRaw : enabledTabsRaw.filter((t: string) => t !== 'Patients');
+  const enabledTabs = currentUser?.resource_fhir?.enabled_tabs || defaultTabsForRole(currentUser?.position_role || '');
 
   const navigationItems = [
     { name: 'Dashboard' as TabType, icon: LayoutDashboard },
@@ -217,16 +234,41 @@ export const Layout: React.FC<LayoutProps> = ({
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800 dark:bg-[#0B0F19] dark:text-slate-100 transition-colors duration-200">
       
+      {/* Mobile Sidebar Overlay */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-25 lg:hidden"
+        />
+      )}
+
       {/* 1. LEFT SIDEBAR */}
-      <aside className="w-64 fixed inset-y-0 left-0 bg-white border-r border-slate-200 dark:bg-[#111827] dark:border-slate-800 flex flex-col justify-between z-30 transition-colors duration-200">
+      <aside className={`w-64 fixed inset-y-0 left-0 bg-white border-r border-slate-200 dark:bg-[#111827] dark:border-slate-800 flex flex-col justify-between z-30 transition-all duration-250 transform lg:translate-x-0 ${
+        mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}>
         <div>
           {/* Logo Brand Header */}
-          <div className="h-16 flex items-center px-2 border-b border-slate-150 dark:border-slate-800 bg-slate-50/55 dark:bg-[#111827] justify-center overflow-hidden">
-            <img 
-              src="/logo.png" 
-              alt="Zenith Core Alliance Logo" 
-              className="h-full w-full object-contain p-1.5"
-            />
+          <div className="h-16 flex items-center px-2 border-b border-slate-150 dark:border-slate-800 bg-slate-50/55 dark:bg-[#111827] justify-center overflow-hidden relative">
+            <button
+              onClick={() => {
+                setActiveTab('Dashboard');
+                setMobileMenuOpen(false);
+              }}
+              className="h-full w-full outline-none focus:outline-none"
+            >
+              <img 
+                src="/logo.png" 
+                alt="Zenith Core Alliance Logo" 
+                className="h-full w-full object-contain p-1.5 cursor-pointer"
+              />
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="lg:hidden absolute right-3 top-4 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              aria-label="Close sidebar"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
           {/* Navigation Tabs */}
@@ -237,11 +279,14 @@ export const Layout: React.FC<LayoutProps> = ({
               return (
                 <button
                   key={item.name}
-                  onClick={() => setActiveTab(item.name)}
+                  onClick={() => {
+                    setActiveTab(item.name);
+                    setMobileMenuOpen(false);
+                  }}
                   className={`w-full flex items-center px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-150 group ${
                     isActive
                       ? 'bg-brand-500 text-white shadow-md shadow-brand-500/10'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-white'
+                      : 'text-slate-650 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-white'
                   }`}
                 >
                   <Icon className={`h-5 w-5 mr-3 flex-shrink-0 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200'}`} />
@@ -260,50 +305,34 @@ export const Layout: React.FC<LayoutProps> = ({
             <img 
               src="/praxdoc_logo.png" 
               alt="PraxDoc Logo" 
-              className="h-12 w-auto object-contain"
+              className="h-36 w-auto object-contain"
             />
-          </div>
-
-          {/* Dark / Light Toggle Switch */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              {darkMode ? 'Dark Theme Active' : 'Light Theme Active'}
-            </span>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="relative inline-flex h-6 w-11 items-center rounded-full bg-slate-200 dark:bg-slate-700 transition-colors focus:outline-none"
-              id="theme-toggle"
-            >
-              <span
-                className={`${
-                  darkMode ? 'translate-x-6 bg-brand-500' : 'translate-x-1 bg-white'
-                } inline-block h-4 w-4 transform rounded-full transition-transform flex items-center justify-center`}
-              >
-                {darkMode ? (
-                  <Moon className="h-2.5 w-2.5 text-white" />
-                ) : (
-                  <Sun className="h-2.5 w-2.5 text-amber-500" />
-                )}
-              </span>
-            </button>
           </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 pl-64 flex flex-col min-h-screen">
+      <div className="flex-1 lg:pl-64 pl-0 flex flex-col min-h-screen">
         
         {/* 2. TOP BAR */}
-        <header className="h-16 bg-white border-b border-slate-200 dark:bg-[#111827] dark:border-slate-800 flex items-center justify-between px-8 sticky top-0 z-25 transition-colors duration-200">
+        <header className="h-16 bg-white border-b border-slate-200 dark:bg-[#111827] dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-25 transition-colors duration-200">
           
-          {/* Left spacer / Empty div since search was moved */}
-          <div></div>
+          {/* Hamburger Menu on Mobile */}
+          <div className="flex items-center">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg lg:hidden transition-colors mr-2"
+              aria-label="Open sidebar"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          </div>
 
           {/* Actions & Profile */}
           <div className="flex items-center space-x-4">
             
             {/* Notification Icon */}
-            <div className="relative">
+            <div className="relative" ref={notificationsRef}>
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
                 className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors relative"
@@ -355,7 +384,7 @@ export const Layout: React.FC<LayoutProps> = ({
             </div>
 
             {/* Profile Dropdown */}
-            <div className="relative">
+            <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
                 className="flex items-center space-x-3 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all focus:outline-none"

@@ -7,7 +7,8 @@ import {
   Clock,
   User as UserIcon,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 import { dataService, subscribeToTable } from '../services/dataService';
 import type { TodoTask, User as StaffUser } from '../services/dataService';
@@ -112,6 +113,52 @@ export const TasksView: React.FC<TasksViewProps> = ({
     try {
       await dataService.toggleTodoTask(taskId);
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Toggled completion status of task ID: ${taskId}`);
+      triggerRefresh();
+      loadTasksData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    const confirmDelete = window.confirm("Are you sure you want to permanently delete this task?");
+    if (!confirmDelete) return;
+
+    try {
+      const task = todoTasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      await dataService.deleteTodoTask(taskId);
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Permanently deleted task: ${task.title}`);
+
+      // Send notifications to assignee and all admins
+      try {
+        const users = await dataService.getUsers();
+        const admins = users.filter(u => u.position_role === 'Admin');
+        
+        // Notify Assignee (if different from deleting user)
+        if (task.assigned_to && task.assigned_to !== currentUser?.id) {
+          await dataService.addNotification({
+            user_id: task.assigned_to,
+            title: 'Assigned Task Deleted',
+            description: `The task "${task.title}" assigned to you was deleted by ${currentUser?.full_name || 'an administrator'}`,
+          });
+        }
+
+        // Notify Admins (if different from deleting user)
+        for (const admin of admins) {
+          if (admin.id !== currentUser?.id) {
+            await dataService.addNotification({
+              user_id: admin.id,
+              title: 'Workspace Task Deleted',
+              description: `Task "${task.title}" was deleted by ${currentUser?.full_name || 'an administrator'}`,
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.warn("Failed to route task deletion notifications:", notifErr);
+      }
+
       triggerRefresh();
       loadTasksData();
     } catch (err) {
@@ -280,13 +327,22 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug">{task.title}</h4>
-                      <input
-                        type="checkbox"
-                        checked={false}
-                        onChange={() => handleToggleTask(task.id)}
-                        className="h-4.5 w-4.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500 mt-0.5 cursor-pointer"
-                      />
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug flex-1">{task.title}</h4>
+                      <div className="flex items-center space-x-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer"
+                          title="Delete task"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          onChange={() => handleToggleTask(task.id)}
+                          className="h-4.5 w-4.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500 cursor-pointer"
+                        />
+                      </div>
                     </div>
                     {task.description && (
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{task.description}</p>
@@ -336,13 +392,22 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 line-through leading-snug">{task.title}</h4>
-                      <input
-                        type="checkbox"
-                        checked={true}
-                        onChange={() => handleToggleTask(task.id)}
-                        className="h-4.5 w-4.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500 mt-0.5 cursor-pointer"
-                      />
+                      <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 line-through leading-snug flex-1">{task.title}</h4>
+                      <div className="flex items-center space-x-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="text-slate-400 hover:text-red-500 p-0.5 rounded transition-colors cursor-pointer"
+                          title="Delete task"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                        <input
+                          type="checkbox"
+                          checked={true}
+                          onChange={() => handleToggleTask(task.id)}
+                          className="h-4.5 w-4.5 rounded border-slate-300 text-brand-500 focus:ring-brand-500 cursor-pointer"
+                        />
+                      </div>
                     </div>
                     {task.description && (
                       <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed line-through">{task.description}</p>
@@ -363,14 +428,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
       {/* Task Creation Modal */}
       {showTaskForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md dark:bg-slate-900 dark:border-slate-800 overflow-hidden">
             <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center">
               <h3 className="font-bold text-sm">Assign New Logistics Task</h3>
               <button onClick={() => setShowTaskForm(false)} className="text-white/80 hover:text-white text-xs font-bold">Close</button>
             </div>
             
-            <form onSubmit={handleCreateTask} className="p-6 space-y-4">
+            <form onSubmit={handleCreateTask} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Task Title</label>
                 <input
@@ -422,7 +487,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   disabled={loading}
                   className="px-4 py-2 bg-emerald-600 text-white font-bold rounded text-xs hover:bg-emerald-700 transition-all shadow disabled:opacity-50"
                 >
-                  {loading ? 'Creating...' : 'Create Kanban Task'}
+                  {loading ? 'Creating...' : 'Create Task'}
                 </button>
               </div>
             </form>

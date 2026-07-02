@@ -13,12 +13,16 @@ import {
 import { dataService } from '../services/dataService';
 import type { User as StaffUser, ScheduledSession, BusinessExpense, Invoice } from '../services/dataService';
 
+import { AttendanceView } from './AttendanceView';
+
 interface ReportsViewProps {
   triggerRefresh: () => void;
   triggerRefreshKey: number;
+  currentUser: StaffUser | null;
 }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, triggerRefreshKey }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, triggerRefreshKey, currentUser }) => {
+  const [activeReportTab, setActiveReportTab] = useState<'analytics' | 'attendance'>('analytics');
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [sessions, setSessions] = useState<ScheduledSession[]>([]);
   const [expenses, setExpenses] = useState<BusinessExpense[]>([]);
@@ -142,11 +146,45 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       
-      {/* 2. Interactive Cashflow & Expenses Distribution (Pie chart) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-6">
-        <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+      {/* Premium Report Sub-Tabs */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 mb-2">
+        <button
+          onClick={() => setActiveReportTab('analytics')}
+          className={`flex items-center space-x-2 py-3 px-4 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            activeReportTab === 'analytics'
+              ? 'border-brand-500 text-brand-500'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-white'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4" />
+          <span>Financials & Productivity</span>
+        </button>
+        <button
+          onClick={() => setActiveReportTab('attendance')}
+          className={`flex items-center space-x-2 py-3 px-4 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            activeReportTab === 'attendance'
+              ? 'border-brand-500 text-brand-500'
+              : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-white'
+          }`}
+        >
+          <Clock className="h-4 w-4" />
+          <span>Attendance Reports</span>
+        </button>
+      </div>
+
+      {activeReportTab === 'attendance' ? (
+        <AttendanceView
+          triggerRefresh={triggerRefresh}
+          triggerRefreshKey={triggerRefreshKey}
+          currentUser={currentUser}
+        />
+      ) : (
+        <div className="space-y-8 animate-fade-in">
+          {/* 2. Interactive Cashflow & Expenses Distribution (Pie chart) */}
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-6">
+            <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
           <PieChart className="h-5 w-5 text-indigo-500" />
           <h3 className="font-bold text-slate-900 dark:text-white font-outfit">Cashflow & Financial Allocations Distribution</h3>
         </div>
@@ -432,6 +470,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
           </table>
         </div>
       </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -18,6 +18,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
 
   // New Staff member form
   const [showAddForm, setShowAddForm] = useState(false);
+  const [tabsExpanded, setTabsExpanded] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'Admin' | 'Senior Therapist' | 'Receptionist'>('Senior Therapist');
@@ -214,6 +215,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
         can_manage_finance: isAdmin || role === 'Receptionist',
         can_print_generate_invoice: true,
         can_manage_staff: isAdmin,
+        can_manage_attendance: isAdmin || role === 'Receptionist',
         base_salary_monthly: baseSalary,
         bonus_system_enabled: bonusEnabled,
         resource_fhir: {
@@ -621,14 +623,14 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
 
       {/* Add Staff modal */}
       {showAddForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in">
             <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center">
               <h3 className="font-bold text-sm">Add Staff Directory Profile</h3>
               <button onClick={() => setShowAddForm(false)} className="text-white/85 hover:text-white text-xs font-semibold">Close</button>
             </div>
             
-            <form onSubmit={handleAddStaff} className="p-6 space-y-4">
+            <form onSubmit={handleAddStaff} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
                 <input
@@ -765,26 +767,37 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
               </div>
 
               <div className="border border-slate-150 dark:border-slate-800 rounded-lg p-3.5 bg-slate-50 dark:bg-slate-900/40 space-y-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase">Visible Navigation Tabs</label>
-                <div className="grid grid-cols-3 gap-2 pt-1.5">
-                  {['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'].map((tab) => (
-                    <label key={tab} className="flex items-center space-x-2 text-xs text-slate-650 dark:text-slate-350 font-semibold cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedTabs.includes(tab)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedTabs((prev) => [...prev, tab]);
-                          } else {
-                            setSelectedTabs((prev) => prev.filter((t) => t !== tab));
-                          }
-                        }}
-                        className="h-3.5 w-3.5 text-brand-500 rounded border-slate-300 dark:border-slate-750 bg-white"
-                      />
-                      <span>{tab}</span>
-                    </label>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setTabsExpanded(!tabsExpanded)}
+                  className="flex items-center justify-between w-full text-xs font-bold text-slate-500 uppercase focus:outline-none"
+                >
+                  <span>Visible Navigation Tabs ({selectedTabs.length} selected)</span>
+                  <span className="text-slate-400">{tabsExpanded ? '▲' : '▼'}</span>
+                </button>
+                {tabsExpanded && (
+                  <div className="max-h-28 overflow-y-auto border-t border-slate-200 dark:border-slate-700 mt-2 pt-2 pr-1">
+                    <div className="grid grid-cols-3 gap-2">
+                      {['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'].map((tab) => (
+                        <label key={tab} className="flex items-center space-x-2 text-xs text-slate-650 dark:text-slate-350 font-semibold cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedTabs.includes(tab)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedTabs((prev) => [...prev, tab]);
+                              } else {
+                                setSelectedTabs((prev) => prev.filter((t) => t !== tab));
+                              }
+                            }}
+                            className="h-3.5 w-3.5 text-brand-500 rounded border-slate-300 dark:border-slate-750 bg-white"
+                          />
+                          <span>{tab}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <span className="block text-[10px] text-slate-400 dark:text-slate-550 leading-normal pt-1">
                   Only the checked tabs will be visible in the sidebar navigation menu for this user account.
                 </span>
@@ -865,14 +878,14 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
 
       {/* Edit Staff modal */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in">
             <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center">
               <h3 className="font-bold text-sm">Edit Staff Directory Profile</h3>
               <button onClick={() => setEditingUser(null)} className="text-white/85 hover:text-white text-xs font-semibold">Close</button>
             </div>
             
-            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
                 <input

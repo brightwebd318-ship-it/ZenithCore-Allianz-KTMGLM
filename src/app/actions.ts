@@ -332,25 +332,33 @@ export async function addClinicalLogAction(accessToken: string, newLogPayload: a
   return data;
 }
 
-export async function softDeleteClinicalLogAction(accessToken: string, logId: string) {
+export async function deleteClinicalLogAction(accessToken: string, logId: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const { error } = await supabase
     .from('clinical_logs')
-    .update({ is_deleted: true })
+    .delete()
     .eq('id', logId);
   if (error) throw error;
   return true;
 }
 
 // 6. INVOICES
-export async function getInvoicesAction(accessToken: string) {
+export async function getInvoicesAction(accessToken: string, dateFilter?: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const tenantId = await getTenantIdFromToken(supabase);
-  const { data, error } = await supabase
+  let query = supabase
     .from('invoices')
     .select('*')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false });
+
+  if (dateFilter) {
+    query = query
+      .gte('created_at', `${dateFilter}T00:00:00.000Z`)
+      .lte('created_at', `${dateFilter}T23:59:59.999Z`);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data;
 }
@@ -614,6 +622,13 @@ export async function wipeCompletedTasksAction(accessToken: string) {
   return true;
 }
 
+export async function deleteTodoTaskAction(accessToken: string, taskId: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { error } = await supabase.from('todo_tasks').delete().eq('id', taskId);
+  if (error) throw error;
+  return true;
+}
+
 export async function getTenantResourceMetricsAction(accessToken: string, tenantId: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const { data, error } = await supabase
@@ -734,5 +749,86 @@ export async function deleteStaffAction(accessToken: string, userId: string) {
   if (dbErr) throw dbErr;
 
   return true;
+}
+
+// 15. SERVICES & CHARGES
+export async function getServicesAction(accessToken: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase
+    .from('services')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addServiceAction(accessToken: string, dbPayload: any) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { data, error } = await supabase
+    .from('services')
+    .insert([dbPayload])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteServiceAction(accessToken: string, serviceId: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { error } = await supabase
+    .from('services')
+    .delete()
+    .eq('id', serviceId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  return true;
+}
+
+// 16. ATTENDANCE LOGGING
+export async function getAttendanceAction(accessToken: string, dateFilter?: string, staffId?: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  let query = supabase
+    .from('attendance')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('date', { ascending: false });
+
+  if (dateFilter) {
+    query = query.eq('date', dateFilter);
+  }
+  if (staffId) {
+    query = query.eq('user_id', staffId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addAttendanceAction(accessToken: string, dbPayload: any) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { data, error } = await supabase
+    .from('attendance')
+    .insert([dbPayload])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateAttendanceAction(accessToken: string, id: string, dbPayload: any) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { data, error } = await supabase
+    .from('attendance')
+    .update(dbPayload)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 

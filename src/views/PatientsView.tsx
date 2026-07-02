@@ -11,7 +11,8 @@ import {
   Archive,
   Search,
   CreditCard,
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { Patient, ClinicalLog, User as StaffUser, Invoice, ScheduledSession } from '../services/dataService';
@@ -353,10 +354,10 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
     }
   };
 
-  // Clinical Log soft-delete (with Storage cascade file removal)
-  const handleSoftDeleteLog = async (logId: string) => {
+  // Clinical Log hard-delete (with Storage cascade file removal and Admin notifications)
+  const handleDeleteLog = async (logId: string) => {
     if (!selectedPatient) return;
-    const confirmDelete = window.confirm("Are you sure you want to archive this clinical progress log? Linked files in storage will also be deleted.");
+    const confirmDelete = window.confirm("Are you sure you want to permanently delete this clinical progress log? This action is irreversible, and linked files in storage will also be deleted.");
     if (!confirmDelete) return;
 
     try {
@@ -372,13 +373,35 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
         }
       }
 
-      await dataService.softDeleteClinicalLog(logId);
+      await dataService.deleteClinicalLog(logId);
       
       // Reload logs
       const updatedLogs = await dataService.getClinicalLogs(selectedPatient.id);
       setLogs(updatedLogs);
       
-      await dataService.addAuditTrail('READ_PATIENT', `Archived progress log and deleted storage attachment for patient ID ${selectedPatient.id}`);
+      const patientName = selectedPatient.resource_fhir?.name?.[0]?.given?.[0]
+        ? `${selectedPatient.resource_fhir.name[0].given[0]} ${selectedPatient.resource_fhir.name[0].family || ''}`
+        : 'Unknown Patient';
+
+      await dataService.addAuditTrail('READ_PATIENT', `Permanently deleted progress log and storage attachment for patient: ${patientName}`);
+
+      // Notify all admins of the clinical log deletion
+      try {
+        const users = await dataService.getUsers();
+        const admins = users.filter(u => u.position_role === 'Admin');
+        const deletedBy = currentUser?.full_name || 'A staff member';
+        
+        for (const admin of admins) {
+          await dataService.addNotification({
+            user_id: admin.id,
+            title: 'Clinical Log Permanently Deleted',
+            description: `Clinical log for patient ${patientName} was permanently deleted by ${deletedBy}`,
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Failed to notify admins of clinical log deletion:", notifErr);
+      }
+
       triggerRefresh();
     } catch (err) {
       console.error(err);
@@ -394,19 +417,6 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
     }
   };
 
-  const hasAccess = currentUser?.can_view_personal_data && currentUser?.can_view_medical_history;
-  
-  if (currentUser && !hasAccess) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-center bg-white border border-red-200 rounded-xl dark:bg-[#111827] dark:border-red-950/20 max-w-xl mx-auto mt-12 shadow-lg col-span-full">
-        <ShieldAlert className="h-12 w-12 text-red-500 mb-4 animate-bounce" />
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Access Denied</h3>
-        <p className="text-xs text-slate-500 dark:text-slate-450 mt-2 max-w-md">
-          Viewing patient clinical charts and personal ledger records requires both 'Read Personal Data' and 'Read Medical Logs' privileges. Please contact your system administrator.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -441,7 +451,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
 
         {/* Patients Table Card */}
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm dark:bg-[#111827] dark:border-slate-800">
-          <div className="max-h-[70vh] overflow-y-auto">
+          <div className="max-h-[70vh] overflow-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:bg-slate-800/40 dark:border-slate-800">
@@ -624,65 +634,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
               </div>
             </div>
 
-            {/* 3. DPDP Act 2023 Consent Vault */}
-            <div className="rounded-xl border border-brand-100 bg-brand-50/20 p-5 shadow-sm dark:bg-brand-950/5 dark:border-brand-900/20">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start space-x-3">
-                  <div className="mt-0.5">
-                    {selectedPatient.consent_given && !selectedPatient.consent_withdrawal_requested ? (
-                      <div className="h-8 w-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center dark:bg-emerald-950/20 dark:text-emerald-400">
-                        <CheckCircle2 className="h-5 w-5" />
-                      </div>
-                    ) : (
-                      <div className="h-8 w-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center dark:bg-amber-950/20 dark:text-amber-400">
-                        <ShieldAlert className="h-5 w-5" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">DPDP Indian Consent Vault</h4>
-                      {selectedPatient.consent_given && !selectedPatient.consent_withdrawal_requested ? (
-                        <span className="text-[9px] bg-emerald-500 text-white px-2 py-0.5 rounded font-extrabold tracking-wider uppercase">Consent Active</span>
-                      ) : selectedPatient.consent_withdrawal_requested ? (
-                        <span className="text-[9px] bg-red-500 text-white px-2 py-0.5 rounded font-extrabold tracking-wider uppercase">WITHDRAWAL REQUESTED</span>
-                      ) : (
-                        <span className="text-[9px] bg-amber-500 text-white px-2 py-0.5 rounded font-extrabold tracking-wider uppercase">No Consent Record</span>
-                      )}
-                    </div>
-                    
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed max-w-lg">
-                      Forensic digital audit trail. According to DPDP Act 2023, data can only be accessed with verified permissions.
-                    </p>
-                    
-                    {selectedPatient.consent_timestamp && (
-                      <div className="flex items-center text-[10px] text-slate-400 mt-2 font-mono">
-                        <Clock className="h-3.5 w-3.5 mr-1" />
-                        Forensic Opt-in Stamp: {new Date(selectedPatient.consent_timestamp).toLocaleString('en-IN')}
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                <div className="flex-shrink-0">
-                  {selectedPatient.consent_given && !selectedPatient.consent_withdrawal_requested ? (
-                    <button
-                      onClick={() => handleWithdrawConsent(selectedPatient.id)}
-                      className="text-xs font-bold text-red-600 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-lg dark:text-red-400 dark:border-red-900/50 dark:hover:bg-red-950/20 transition-all shadow-sm"
-                    >
-                      Withdraw Consent
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleActivateConsent(selectedPatient.id)}
-                      className="text-xs font-bold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1.5 rounded-lg dark:text-emerald-400 dark:border-emerald-900/50 dark:hover:bg-emerald-950/20 transition-all shadow-sm"
-                    >
-                      Activate Consent
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
 
             {/* Clinical Logging Timeline */}
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800">
@@ -812,14 +764,14 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                           )}
                         </div>
 
-                        {/* Soft Delete Trigger */}
+                        {/* Hard Delete Trigger */}
                         <button
-                          onClick={() => handleSoftDeleteLog(log.id)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex items-center space-x-1"
-                          title="Soft delete from active view (DGHS compliance audit preserved)"
+                          onClick={() => handleDeleteLog(log.id)}
+                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex items-center space-x-1 cursor-pointer"
+                          title="Permanently delete clinical progress log and attached files"
                         >
-                          <Archive className="h-4 w-4" />
-                          <span className="text-[9px] font-bold">Archive</span>
+                          <Trash2 className="h-4 w-4" />
+                          <span className="text-[9px] font-bold">Delete</span>
                         </button>
                       </div>
                     );
@@ -921,6 +873,66 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                   )}
                 </div>
               )}
+            </div>
+
+            {/* 3. DPDP Act 2023 Consent Vault */}
+            <div className="rounded-xl border border-brand-100 bg-brand-50/20 p-5 shadow-sm dark:bg-brand-950/5 dark:border-brand-900/20">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start space-x-3">
+                  <div className="mt-0.5">
+                    {selectedPatient.consent_given && !selectedPatient.consent_withdrawal_requested ? (
+                      <div className="h-8 w-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center dark:bg-emerald-950/20 dark:text-emerald-400">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </div>
+                    ) : (
+                      <div className="h-8 w-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center dark:bg-amber-950/20 dark:text-amber-400">
+                        <ShieldAlert className="h-5 w-5" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">DPDP Indian Consent Vault</h4>
+                      {selectedPatient.consent_given && !selectedPatient.consent_withdrawal_requested ? (
+                        <span className="text-[9px] bg-emerald-500 text-white px-2 py-0.5 rounded font-extrabold tracking-wider uppercase">Consent Active</span>
+                      ) : selectedPatient.consent_withdrawal_requested ? (
+                        <span className="text-[9px] bg-red-500 text-white px-2 py-0.5 rounded font-extrabold tracking-wider uppercase">WITHDRAWAL REQUESTED</span>
+                      ) : (
+                        <span className="text-[9px] bg-amber-500 text-white px-2 py-0.5 rounded font-extrabold tracking-wider uppercase">No Consent Record</span>
+                      )}
+                    </div>
+                    
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed max-w-lg">
+                      Forensic digital audit trail. According to DPDP Act 2023, data can only be accessed with verified permissions.
+                    </p>
+                    
+                    {selectedPatient.consent_timestamp && (
+                      <div className="flex items-center text-[10px] text-slate-400 mt-2 font-mono">
+                        <Clock className="h-3.5 w-3.5 mr-1" />
+                        Forensic Opt-in Stamp: {new Date(selectedPatient.consent_timestamp).toLocaleString('en-IN')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-shrink-0">
+                  {selectedPatient.consent_given && !selectedPatient.consent_withdrawal_requested ? (
+                    <button
+                      onClick={() => handleWithdrawConsent(selectedPatient.id)}
+                      className="text-xs font-bold text-red-600 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-lg dark:text-red-400 dark:border-red-900/50 dark:hover:bg-red-950/20 transition-all shadow-sm"
+                    >
+                      Withdraw Consent
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleActivateConsent(selectedPatient.id)}
+                      className="text-xs font-bold text-emerald-600 border border-emerald-200 hover:bg-emerald-50 px-3 py-1.5 rounded-lg dark:text-emerald-400 dark:border-emerald-900/50 dark:hover:bg-emerald-950/20 transition-all shadow-sm"
+                    >
+                      Activate Consent
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         ) : (
