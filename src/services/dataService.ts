@@ -86,6 +86,7 @@ export interface User {
   can_view_personal_data: boolean;
   can_view_medical_history: boolean;
   can_manage_finance: boolean;
+  can_manage_attendance?: boolean;
   can_print_generate_invoice: boolean;
   can_manage_staff: boolean;
   base_salary_monthly: number;
@@ -934,7 +935,7 @@ export const dataService = {
       }
   },
 
-  softDeleteClinicalLog: async (logId: string): Promise<void> => {
+  deleteClinicalLog: async (logId: string): Promise<void> => {
     {
       const token = await getAuthToken();
       await deleteClinicalLogAction(token, logId);
@@ -942,7 +943,7 @@ export const dataService = {
   },
 
   // INVOICES
-  getInvoices: async (): Promise<Invoice[]> => {
+  getInvoices: async (monthFilter?: string): Promise<Invoice[]> => {
     {
       const token = await getAuthToken();
       return getInvoicesAction(token);
@@ -955,7 +956,8 @@ export const dataService = {
     practitionerId: string,
     applyGst: boolean,
     baseAmount: number,
-    customItems?: Array<{ name: string; quantity: number; rate: number }>
+    customItems?: Array<{ name: string; quantity: number; rate: number }>,
+    sessionDescription?: string
   ): Promise<Invoice> => {
     const tenant = await dataService.getTenant();
     
@@ -979,7 +981,7 @@ export const dataService = {
       }
     const nextNum = currentInvoicesCount + 1;
     const invoiceNum = `INV-2026-${String(nextNum).padStart(3, '0')}`;
-    const invoiceId = isSupabaseConfigured ? generateUUID() : invoiceNum; // UUID primary key for Supabase, sequential for mock
+    const invoiceId = generateUUID(); // UUID primary key for Supabase, sequential for mock
 
     // Calculate session rate
     const customTotal = customItems ? customItems.reduce((sum, item) => sum + item.quantity * item.rate, 0) : 0;
@@ -999,7 +1001,7 @@ export const dataService = {
       igst_rate: 0,
       computed_tax_amount,
       total_amount,
-      payment_status: isSupabaseConfigured ? 'pending' : 'PENDING',
+      payment_status: 'pending',
       created_at: new Date().toISOString(),
       resource_fhir: {
         resourceType: 'Invoice',
@@ -1754,48 +1756,28 @@ export const dataService = {
       }
   },
 
-  // NOTIFICATIONS
-  getNotifications: async (userId: string): Promise<SystemNotification[]> => {
-    const all = getStorageItem('notifications', [] as SystemNotification[]);
-    return all.filter((n: any) => n.user_id === userId);
-  },
 
-  addNotification: async (notification: { user_id: string; title: string; description: string; target_id?: string }): Promise<SystemNotification> => {
-    if (!notification.user_id) return {} as SystemNotification;
-    const all = getStorageItem('notifications', [] as SystemNotification[]);
-    const newNotification: SystemNotification = {
-      id: generateUUID(),
-      user_id: notification.user_id,
-      title: notification.title,
-      description: notification.description,
-      created_at: new Date().toISOString(),
-      is_read: false,
-      target_id: notification.target_id,
-    };
-    all.unshift(newNotification);
-    setStorageItem('notifications', all);
-    return newNotification;
-  },
-
+  // NOTIFICATIONS STUBS
+  getNotifications: async (userId: string): Promise<any[]> => [],
+  addNotification: async (n: any): Promise<any> => n,
   clearNotifications: async (userId: string): Promise<void> => {},
-
   markNotificationsRead: async (userId: string): Promise<void> => {},
 
   // SERVICES STUBS
-  getServices: async (): Promise<any[]> => [],
-  addService: async (s: any): Promise<any> => s,
-  deleteService: async (id: string): Promise<void> => {},
+  getServices: async (...args: any[]): Promise<any[]> => [],
+  addService: async (...args: any[]): Promise<any> => args[0],
+  deleteService: async (...args: any[]): Promise<void> => {},
 
   // ATTENDANCE STUBS
-  getAttendance: async (): Promise<any[]> => [],
-  markAttendance: async (a: any): Promise<any> => a,
-  markAttendanceQR: async (a: any): Promise<any> => a,
+  getAttendance: async (...args: any[]): Promise<any[]> => [],
+  markAttendance: async (...args: any[]): Promise<any> => args[0],
+  markAttendanceQR: async (...args: any[]): Promise<any> => args[0],
 
   // TODO TASKS STUBS
-  deleteTodoTask: async (id: string): Promise<void> => {},
+  deleteTodoTask: async (...args: any[]): Promise<void> => {},
 
-  // CLINICAL LOGS
-  softDeleteClinicalLog: async (id: string): Promise<void> => {},
+  // CLINICAL LOGS STUBS
+  softDeleteClinicalLog: async (...args: any[]): Promise<void> => {},
 };
 
 export interface Attendance {
