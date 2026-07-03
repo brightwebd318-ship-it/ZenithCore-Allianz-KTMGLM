@@ -72,7 +72,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
     : invoices;
 
   const filteredExpenses = cashflowMonth
-    ? expenses.filter(exp => exp.date.startsWith(cashflowMonth))
+    ? expenses.filter(exp => exp.expense_date.startsWith(cashflowMonth))
     : expenses;
 
   // Financial breakdown computations
