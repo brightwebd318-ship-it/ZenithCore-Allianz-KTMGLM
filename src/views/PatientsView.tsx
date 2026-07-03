@@ -46,6 +46,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
   const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
   const [newAddress, setNewAddress] = useState('');
   const [newAbhaNumber, setNewAbhaNumber] = useState('');
   const [newAbhaAddress, setNewAbhaAddress] = useState('');
@@ -239,7 +240,10 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
         resource_fhir: {
           resourceType: 'Patient',
           name: [{ given: [newGivenName], family: newFamilyName }],
-          telecom: [{ system: 'phone', value: newPhone }],
+          telecom: [
+            { system: 'phone', value: newPhone },
+            { system: 'email', value: newEmail }
+          ],
           gender: newGender,
           birthDate: newBirthDate,
           address: [{ text: newAddress }],
@@ -254,6 +258,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
       setNewGivenName('');
       setNewFamilyName('');
       setNewPhone('');
+      setNewEmail('');
       setNewAddress('');
       setNewAbhaNumber('');
       setNewAbhaAddress('');
@@ -1020,6 +1025,19 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                     placeholder="9988776655"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Contact Email</label>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 focus:outline-none"
+                    placeholder="patient@example.com"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Residential Address</label>
                   <input

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CreditCard, Eye, Plus, FileText, UserCheck, Calendar, Search } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { Invoice, Patient, User as StaffUser, InventoryItem } from '../services/dataService';
+import { sendInvoiceEmailAction } from '../app/actions';
 
 interface BillingViewProps {
   triggerRefresh: () => void;
@@ -159,6 +160,27 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       
       // Open print overlay
       setPrintableInvoice(newInv);
+      
+      // Send email if patient has one
+      try {
+        const patientData = patients.find(p => p.id === selectedPatientId);
+        if (patientData && patientData.resource_fhir?.telecom) {
+          const emailTelecom = patientData.resource_fhir.telecom.find((t: any) => t.system === 'email');
+          if (emailTelecom && emailTelecom.value) {
+            const invoiceDetails = {
+              invoiceNum: newInv.resource_fhir?.identifier?.[0]?.value || newInv.id,
+              patientName: `${patientData.resource_fhir?.name?.[0]?.given?.[0]} ${patientData.resource_fhir?.name?.[0]?.family}`,
+              created_at: newInv.created_at,
+              total_amount: newInv.total_amount,
+              status: newInv.payment_status
+            };
+            await sendInvoiceEmailAction(invoiceDetails, emailTelecom.value);
+            console.log("Invoice email sent to " + emailTelecom.value);
+          }
+        }
+      } catch (emailErr) {
+        console.error("Failed to send invoice email:", emailErr);
+      }
       
       triggerRefresh();
     } catch (err) {

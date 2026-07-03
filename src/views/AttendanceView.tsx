@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { Calendar, User, UserCheck, ShieldAlert, CheckCircle, Clock, QrCode, Search, FileText, Camera } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { Attendance, User as StaffUser } from '../services/dataService';
@@ -66,73 +67,41 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
     loadAttendanceData();
   }, [triggerRefreshKey]);
 
-  // QR Scanner Canvas Animation
+  // Real QR Scanner logic
   useEffect(() => {
-    if (modalMode === 'qr' && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      let lineY = 0;
-      let direction = 1;
-
-      const drawScanner = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Draw camera mockup grid/boundaries
-        ctx.strokeStyle = '#64748B'; // slate-500
-        ctx.lineWidth = 2;
-        ctx.strokeRect(40, 40, canvas.width - 80, canvas.height - 80);
-
-        // Draw corner brackets
-        ctx.strokeStyle = '#3B82F6'; // blue-500
-        ctx.lineWidth = 4;
+    let scanner: Html5QrcodeScanner | null = null;
+    if (modalMode === 'qr') {
+      scanner = new Html5QrcodeScanner(
+        "qr-reader",
+        { fps: 10, qrbox: {width: 250, height: 250}, aspectRatio: 1.0 },
+        /* verbose= */ false
+      );
+      
+      const onScanSuccess = (decodedText: string, decodedResult: any) => {
+        // Stop scanning
+        scanner?.clear();
+        setQrScanResult(decodedText);
+        setQrSuccessMessage("Scanned successfully! Processing...");
+        setQrScanning(true);
         
-        // Top-left corner
-        ctx.beginPath();
-        ctx.moveTo(35, 60); ctx.lineTo(35, 35); ctx.lineTo(60, 35); ctx.stroke();
-        // Top-right corner
-        ctx.beginPath();
-        ctx.moveTo(canvas.width - 60, 35); ctx.lineTo(canvas.width - 35, 35); ctx.lineTo(canvas.width - 35, 60); ctx.stroke();
-        // Bottom-left corner
-        ctx.beginPath();
-        ctx.moveTo(35, canvas.height - 60); ctx.lineTo(35, canvas.height - 35); ctx.lineTo(60, canvas.height - 35); ctx.stroke();
-        // Bottom-right corner
-        ctx.beginPath();
-        ctx.moveTo(canvas.width - 60, canvas.height - 35); ctx.lineTo(canvas.width - 35, canvas.height - 35); ctx.lineTo(canvas.width - 35, canvas.height - 60); ctx.stroke();
-
-        // Draw animated laser red line
-        ctx.strokeStyle = '#EF4444'; // red-500
-        ctx.lineWidth = 3;
-        ctx.shadowColor = 'rgba(239, 68, 68, 0.5)';
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.moveTo(45, 50 + lineY);
-        ctx.lineTo(canvas.width - 45, 50 + lineY);
-        ctx.stroke();
-        ctx.shadowBlur = 0; // reset shadow
-
-        // Update scan line y-coordinate
-        lineY += 2.5 * direction;
-        if (lineY > canvas.height - 100 || lineY < 0) {
-          direction *= -1;
-        }
-
-        // Draw text indicators
-        ctx.fillStyle = '#64748B';
-        ctx.font = '10px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('PLACE COUNTERTOP QR CODE WITHIN FOCUS AREA', canvas.width / 2, canvas.height - 15);
-
-        animationRef.current = requestAnimationFrame(drawScanner);
+        // Use the handleMarkQr from the button
+        setTimeout(() => {
+          simulateQRScan(decodedText);
+        }, 1000);
       };
 
-      drawScanner();
+      const onScanFailure = (error: any) => {
+        // handle scan failure, usually better to ignore and keep scanning
+      };
+
+      scanner.render(onScanSuccess, onScanFailure);
     }
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+      if (scanner) {
+        scanner.clear().catch(error => {
+          console.error("Failed to clear html5QrcodeScanner. ", error);
+        });
       }
     };
   }, [modalMode]);
@@ -179,18 +148,25 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
     }
   };
 
-  const simulateQRScan = async () => {
+  const simulateQRScan = async (decodedText?: string) => {
     if (!currentUser) return;
     setQrScanning(true);
     setQrScanResult(null);
     setQrSuccessMessage(null);
 
-    // Simulate camera capture delay of 1.5 seconds
+    // Simulate camera capture processing
     setTimeout(async () => {
       try {
         const todayStr = new Date().toLocaleDateString('sv-SE');
         const dailyToken = `PRAXDOC-AUTH-${todayStr}`;
-        const response = await dataService.markAttendanceQR(currentUser.id, dailyToken);
+        const finalToken = decodedText || dailyToken; // accept actual qr or fallback
+        
+        // If scanned text isn't correct token, reject
+        if (finalToken !== dailyToken) {
+          throw new Error("Invalid QR Code. Does not match today's attendance token.");
+        }
+
+        const response = await dataService.markAttendanceQR(currentUser.id, finalToken);
         setQrScanning(false);
         setQrScanResult(response.success ? 'success' : 'already_marked');
         setQrSuccessMessage(response.message);
@@ -549,7 +525,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
                   {/* Manual trigger for demo scan */}
                   {!qrScanning && !qrScanResult && (
                     <button
-                      onClick={simulateQRScan}
+                      onClick={() => simulateQRScan()}
                       className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1"
                     >
                       <Camera className="h-4.5 w-4.5" />

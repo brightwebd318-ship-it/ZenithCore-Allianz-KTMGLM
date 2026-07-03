@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerSupabaseClient, createAdminSupabaseClient } from '../services/serverClient';
+import nodemailer from 'nodemailer';
 
 // 1. TENANTS
 async function getTenantIdFromToken(supabase: any) {
@@ -853,3 +854,39 @@ export async function updateAttendanceAction(accessToken: string, id: string, db
   return data;
 }
 
+export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: string) {
+  const { SMTP_EMAIL, SMTP_APP_PASSWORD } = process.env;
+  if (!SMTP_EMAIL || !SMTP_APP_PASSWORD) {
+    throw new Error("SMTP credentials (SMTP_EMAIL and SMTP_APP_PASSWORD) are not configured in environment variables.");
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: SMTP_EMAIL,
+      pass: SMTP_APP_PASSWORD,
+    },
+  });
+
+  const mailOptions = {
+    from: `"Clinic Billing" <${SMTP_EMAIL}>`,
+    to: toEmail,
+    subject: `Invoice Generated: ${invoiceDetails.invoiceNum}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto;">
+        <h2>Hello ${invoiceDetails.patientName},</h2>
+        <p>A new invoice has been generated for your recent visit.</p>
+        <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 4px 0;"><strong>Invoice Number:</strong> ${invoiceDetails.invoiceNum}</p>
+          <p style="margin: 4px 0;"><strong>Date:</strong> ${new Date(invoiceDetails.created_at).toLocaleDateString()}</p>
+          <p style="margin: 4px 0;"><strong>Total Amount:</strong> ₹${invoiceDetails.total_amount}</p>
+          <p style="margin: 4px 0;"><strong>Status:</strong> ${invoiceDetails.status}</p>
+        </div>
+        <p>Thank you for choosing our clinic!</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+  return { success: true };
+}

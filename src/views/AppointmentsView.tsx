@@ -53,6 +53,10 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
   // Toast / Status message
   const [realtimeNotify, setRealtimeNotify] = useState<string | null>(null);
 
+  // Pagination & Filtering
+  const [filterStatus, setFilterStatus] = useState<'all' | 'scheduled' | 'completed' | 'cancelled'>('all');
+  const [visibleCount, setVisibleCount] = useState<number>(10);
+
   const loadSessionsData = async () => {
     try {
       const s = await dataService.getScheduledSessions();
@@ -383,6 +387,22 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
             </span>
           </div>
 
+          <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-lg dark:bg-slate-800/50 w-full overflow-x-auto">
+            {['all', 'scheduled', 'completed', 'cancelled'].map(status => (
+              <button
+                key={status}
+                onClick={() => { setFilterStatus(status as any); setVisibleCount(10); }}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md capitalize transition-colors whitespace-nowrap ${
+                  filterStatus === status 
+                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' 
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-3">
             {loading ? (
               <p className="text-slate-400 text-center py-6 text-sm">Loading clinic schedules...</p>
@@ -392,11 +412,15 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                 <p className="text-slate-400 text-xs mt-3">No shifts scheduled for this session date range.</p>
               </div>
             ) : (
-              // Order by start_time ascending
-              [...sessions]
-                .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-                .map((session) => {
-                  const patient = patients.find((p) => p.id === session.patient_id);
+              (() => {
+                const filtered = sessions.filter(s => filterStatus === 'all' || s.status === filterStatus);
+                const sorted = [...filtered].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+                const visible = sorted.slice(0, visibleCount);
+
+                return (
+                  <>
+                    {visible.map((session) => {
+                      const patient = patients.find((p) => p.id === session.patient_id);
                   const doc = staff.find((s) => s.id === session.practitioner_id);
                   
                   const pName = patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family}` : 'Unknown Patient';
@@ -488,7 +512,20 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                       </div>
                     </div>
                   );
-                })
+                })}
+                {visibleCount < filtered.length && (
+                  <div className="pt-4 pb-2 flex justify-center">
+                    <button
+                      onClick={() => setVisibleCount(prev => prev + 10)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 text-xs font-bold py-2 px-6 rounded-full shadow-sm transition-colors flex items-center"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-2" /> Load More
+                    </button>
+                  </div>
+                )}
+                </>
+              );
+              })()
             )}
           </div>
 
