@@ -61,6 +61,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [editAadhaar, setEditAadhaar] = useState('');
   const [editPrimaryContactName, setEditPrimaryContactName] = useState('');
   const [editPrimaryContactPhone, setEditPrimaryContactPhone] = useState('');
+  const [tenantInfo, setTenantInfo] = useState<any>(null);
 
   const loadStaffData = async () => {
     try {
@@ -70,6 +71,8 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
         const statuses = await dataService.getAuthUsersStatus();
         setAuthStatuses(statuses);
       }
+      const tInfo = await dataService.getTenant();
+      setTenantInfo(tInfo);
     } catch (err) {
       console.error(err);
     } finally {
@@ -342,12 +345,26 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
         </h2>
         
         {canManageStaff && (
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow transition-colors"
-          >
-            <Plus className="h-4 w-4 mr-1" /> Add Directory Profile
-          </button>
+          <div className="flex items-center space-x-4">
+            {tenantInfo && (
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded dark:bg-slate-800 dark:text-slate-400">
+                Accounts Used: {staffList.length} / {tenantInfo.max_user_logins || 5}
+              </span>
+            )}
+            <button
+              onClick={() => {
+                const max = tenantInfo?.max_user_logins || 5;
+                if (staffList.length >= max) {
+                  alert(`Maximum user limit reached (${max}). Please contact Zenith Core Alliance support to upgrade your plan.`);
+                  return;
+                }
+                setShowAddForm(true);
+              }}
+              className="flex items-center bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow transition-colors"
+            >
+              <Plus className="h-4 w-4 mr-1" /> Add Directory Profile
+            </button>
+          </div>
         )}
       </div>
 

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { Patient, ClinicalLog, User as StaffUser, Invoice, ScheduledSession } from '../services/dataService';
+import PatientProfileModal from '../components/PatientProfileModal';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface PatientsViewProps {
@@ -58,6 +59,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
   const [newLogSummary, setNewLogSummary] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [showAllLogs, setShowAllLogs] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const detailsRef = useRef<HTMLDivElement>(null);
@@ -360,7 +363,11 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
       const updatedLogs = await dataService.getClinicalLogs(selectedPatient.id);
       setLogs(updatedLogs);
       
-      await dataService.addAuditTrail('READ_PATIENT', `Added clinical impression with document attachment to patient ID ${selectedPatient.id}`);
+      const patientName = selectedPatient.resource_fhir?.name?.[0]?.given?.[0]
+        ? `${selectedPatient.resource_fhir.name[0].given[0]} ${selectedPatient.resource_fhir.name[0].family || ''}`
+        : 'Unknown Patient';
+      
+      await dataService.addAuditTrail('READ_PATIENT', `Added clinical impression with document attachment to patient: ${patientName} (ID: ${selectedPatient.id})`);
       triggerRefresh();
     } catch (err: any) {
       console.error(err);
@@ -441,7 +448,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
       <div className="lg:col-span-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold flex items-center text-slate-900 dark:text-white">
-            <Users className="h-5 w-5 mr-2 text-brand-500" /> Patient Ledger
+            <Users className="h-5 w-5 mr-2 text-brand-500" /> Patient Records
           </h2>
           <button
             onClick={() => setShowAddForm(true)}
@@ -544,9 +551,9 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                     {selectedPatient.resource_fhir?.name?.[0]?.given?.[0]?.[0] || 'P'}
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                    <button onClick={() => setShowProfileModal(true)} className="text-xl font-bold text-slate-900 dark:text-white hover:text-brand-500 hover:underline text-left transition-colors">
                       {selectedPatient.resource_fhir?.name?.[0]?.given?.[0]} {selectedPatient.resource_fhir?.name?.[0]?.family}
-                    </h3>
+                    </button>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center">
                       <User className="h-3 w-3 mr-1" />
                       DOB: {selectedPatient.resource_fhir?.birthDate || 'Unspecified'} | Gender: {selectedPatient.resource_fhir?.gender}
@@ -585,37 +592,6 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                 </div>
               </div>
 
-              {/* Demographics & ABHA Information */}
-              <div className="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">14-Digit ABHA Number</span>
-                  <div className="text-sm font-bold font-mono text-slate-800 dark:text-slate-200 mt-0.5">
-                    {selectedPatient.abha_number ? (
-                      showDetails ? (
-                        <span className="text-brand-600 dark:text-brand-400">{selectedPatient.abha_number}</span>
-                      ) : (
-                        <span className="text-slate-400 font-normal">••••-••••-••••-••••</span>
-                      )
-                    ) : (
-                      <span className="text-slate-400 italic font-normal text-xs">No ABHA Registered</span>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400">ABHA Address String</span>
-                  <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {selectedPatient.abha_address ? (
-                      showDetails ? (
-                        selectedPatient.abha_address
-                      ) : (
-                        <span className="text-slate-400 font-normal">••••••••@abdm</span>
-                      )
-                    ) : (
-                      <span className="text-slate-400 italic font-normal text-xs">name@abdm</span>
-                    )}
-                  </div>
-                </div>
-              </div>
 
               {/* Contact and address */}
               <div className="grid grid-cols-2 gap-4 mt-4">
@@ -729,7 +705,12 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                 {logs.length === 0 ? (
                   <p className="text-center py-4 text-xs text-slate-400 italic">No clinical progress logs recorded for this patient.</p>
                 ) : (
-                  logs.map((log) => {
+                  (() => {
+                    const sortedLogs = [...logs].sort((a, b) => new Date(b.resource_fhir?.date || '').getTime() - new Date(a.resource_fhir?.date || '').getTime());
+                    const displayedLogs = showAllLogs ? sortedLogs : sortedLogs.slice(0, 5);
+                    return (
+                      <>
+                        {displayedLogs.map((log) => {
                     const author = staffList.find((st) => st.id === log.author_id);
                     const authorName = author ? author.full_name : 'Clinic Specialist';
                     const role = author ? author.position_role : 'Specialist';
@@ -746,7 +727,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                             <span className="text-slate-400">{new Date(log.resource_fhir?.date || '').toLocaleString('en-IN')}</span>
                           </div>
                           
-                          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50/50 p-2.5 rounded-lg border border-slate-100 dark:bg-slate-800/20 dark:border-slate-800">
+                          <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100 dark:bg-slate-800/40 dark:border-slate-700/60 font-medium">
                             {log.resource_fhir?.summary}
                           </p>
 
@@ -791,8 +772,21 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                         </button>
                       </div>
                     );
-                  })
-                )}
+                  })}
+                  {logs.length > 5 && (
+                    <div className="pt-2 text-center">
+                      <button
+                        onClick={() => setShowAllLogs(!showAllLogs)}
+                        className="text-xs font-bold text-brand-500 hover:text-brand-600 dark:text-brand-400"
+                      >
+                        {showAllLogs ? 'Show Less' : `Show All Logs (${logs.length})`}
+                      </button>
+                    </div>
+                  )}
+                  </>
+                )
+              })()
+            )}
               </div>
             </>
           )}
@@ -1387,6 +1381,28 @@ Thank you for choosing PraxDoc Clinic!
         </div>
       )}
 
+      {/* Patient Profile Modal */}
+      {selectedPatient && (
+        <PatientProfileModal
+          patient={selectedPatient}
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          onSave={async (updates) => {
+            try {
+              const updated = await dataService.updatePatientInfo(selectedPatient.id, {
+                abha_number: updates.abha_number,
+                abha_address: updates.abha_address,
+                gstin: updates.gstin,
+                resource_fhir: updates.resource_fhir
+              });
+              setSelectedPatient(updated);
+              triggerRefresh();
+            } catch (err: any) {
+              alert(err.message || "Failed to update patient data");
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

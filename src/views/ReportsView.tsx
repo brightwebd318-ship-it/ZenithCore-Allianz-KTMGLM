@@ -31,8 +31,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   // Hovered slice for pie chart interactivity
   const [hoveredSlice, setHoveredSlice] = useState<{ name: string; value: number; percentage: number; color: string } | null>(null);
 
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
+  const [cashflowMonth, setCashflowMonth] = useState<string>('');
 
   const loadReportsData = async () => {
     try {
@@ -65,16 +66,25 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
     }
   }, [triggerRefreshKey]);
 
+  // Filter invoices and expenses by selected month
+  const filteredInvoices = cashflowMonth 
+    ? invoices.filter(inv => inv.created_at.startsWith(cashflowMonth))
+    : invoices;
+
+  const filteredExpenses = cashflowMonth
+    ? expenses.filter(exp => exp.date.startsWith(cashflowMonth))
+    : expenses;
+
   // Financial breakdown computations
-  const totalIncome = invoices
+  const totalIncome = filteredInvoices
     .filter((inv) => String(inv.payment_status).toUpperCase() === 'PAID')
     .reduce((sum, inv) => sum + inv.total_amount, 0);
 
-  const totalSalaries = expenses.filter(e => e.category === 'Salaries').reduce((sum, e) => sum + e.amount, 0);
-  const totalRent = expenses.filter(e => e.category === 'Rent').reduce((sum, e) => sum + e.amount, 0);
-  const totalSupplies = expenses.filter(e => e.category === 'Supplies').reduce((sum, e) => sum + e.amount, 0);
-  const totalUtilities = expenses.filter(e => e.category === 'Utilities').reduce((sum, e) => sum + e.amount, 0);
-  const totalOther = expenses.filter(e => e.category === 'Other').reduce((sum, e) => sum + e.amount, 0);
+  const totalSalaries = filteredExpenses.filter(e => e.category === 'Salaries').reduce((sum, e) => sum + e.amount, 0);
+  const totalRent = filteredExpenses.filter(e => e.category === 'Rent').reduce((sum, e) => sum + e.amount, 0);
+  const totalSupplies = filteredExpenses.filter(e => e.category === 'Supplies').reduce((sum, e) => sum + e.amount, 0);
+  const totalUtilities = filteredExpenses.filter(e => e.category === 'Utilities').reduce((sum, e) => sum + e.amount, 0);
+  const totalOther = filteredExpenses.filter(e => e.category === 'Other').reduce((sum, e) => sum + e.amount, 0);
 
   const totalExpenses = totalSalaries + totalRent + totalSupplies + totalUtilities + totalOther;
 
@@ -184,10 +194,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
         <div className="space-y-8 animate-fade-in">
           {/* 2. Interactive Cashflow & Expenses Distribution (Pie chart) */}
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-6">
-            <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-          <PieChart className="h-5 w-5 text-indigo-500" />
-          <h3 className="font-bold text-slate-900 dark:text-white font-outfit">Cashflow & Financial Allocations Distribution</h3>
-        </div>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <PieChart className="h-5 w-5 text-indigo-500" />
+                <h3 className="font-bold text-slate-900 dark:text-white font-outfit">Cashflow & Financial Allocations Distribution</h3>
+              </div>
+              <div>
+                <input
+                  type="month"
+                  value={cashflowMonth}
+                  onChange={(e) => setCashflowMonth(e.target.value)}
+                  className="px-3 py-1.5 border border-slate-200 rounded text-xs text-slate-800 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+                  title="Filter by month"
+                />
+              </div>
+            </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
           

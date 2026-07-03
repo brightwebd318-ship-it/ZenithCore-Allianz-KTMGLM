@@ -311,7 +311,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 <p className="text-xs text-slate-400 italic">No pending tasks. Clinic is running smooth!</p>
               </div>
             ) : (
-              pendingTasks.map(task => {
+              [...pendingTasks].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(task => {
                 const assignee = staff.find(st => st.id === task.assigned_to)?.full_name || 'Specialist';
                 const creator = staff.find(st => st.id === task.created_by)?.full_name || 'Admin';
                 const isSelected = task.id === selectedTaskId;
@@ -376,7 +376,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 <p className="text-xs text-slate-400 italic">No completed tasks yet.</p>
               </div>
             ) : (
-              completedTasks.map(task => {
+              [...completedTasks].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(task => {
                 const assignee = staff.find(st => st.id === task.assigned_to)?.full_name || 'Specialist';
                 const creator = staff.find(st => st.id === task.created_by)?.full_name || 'Admin';
                 const isSelected = task.id === selectedTaskId;

@@ -80,6 +80,7 @@ export interface Tenant {
   clinic_end_time: string;
   bonus_threshold_hours?: number;
   session_duration_minutes?: number;
+  max_user_logins?: number;
 }
 
 export interface User {
@@ -916,6 +917,13 @@ export const dataService = {
       const token = await getAuthToken();
       return updatePatientConsentAction(token, patientId, updates);
       }
+  },
+
+  updatePatientInfo: async (patientId: string, updates: Partial<Patient>): Promise<Patient> => {
+    {
+      const token = await getAuthToken();
+      return updatePatientConsentAction(token, patientId, updates);
+    }
   },
 
   // CLINICAL LOGS
