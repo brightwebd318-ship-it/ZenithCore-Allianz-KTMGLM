@@ -620,11 +620,12 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
               }
               #printable-invoice-area {
                 position: absolute !important;
-                left: 0 !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
                 top: 0 !important;
-                width: 100% !important;
-                margin: 0 !important;
-                padding: 0 !important;
+                width: 18cm !important;
+                margin-top: 1cm !important;
+                padding: 1.5cm !important;
                 background: white !important;
                 color: black !important;
                 box-shadow: none !important;
@@ -680,9 +681,8 @@ Subtotal: ₹${printableInvoice.total_amount - printableInvoice.computed_tax_amo
 CGST (9%): ₹${printableInvoice.cgst_rate > 0 ? printableInvoice.computed_tax_amount / 2 : 0}
 SGST (9%): ₹${printableInvoice.sgst_rate > 0 ? printableInvoice.computed_tax_amount / 2 : 0}
 Grand Total: ₹${printableInvoice.total_amount}
-Payment Status: ${String(printableInvoice.payment_status).toUpperCase()}
 --------------------------------------------------
-Thank you for choosing PraxDoc!
+Thank you for choosing Zenith Core Alliance!
 `;
                     const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
@@ -709,23 +709,15 @@ Thank you for choosing PraxDoc!
             </div>
 
             {/* Document Content View */}
-            <div className="p-8 max-h-[75vh] overflow-y-auto bg-white dark:bg-slate-900" id="printable-invoice-area">
-              <div className="space-y-6">
+            <div className="p-8 max-h-[75vh] overflow-y-auto bg-white dark:bg-slate-900 print:max-h-[14cm] print:overflow-hidden print:break-inside-avoid print:p-4 print:border-2 print:border-slate-800 print:rounded-none print:m-0" id="printable-invoice-area">
+              <div className="space-y-4 print:space-y-2">
                 
                 {/* Header branding */}
-                <div className="flex justify-between items-center border-b border-slate-200 pb-4 dark:border-slate-800">
-                  <div className="flex items-center space-x-3">
-                    <img src="/logo.png" alt="PraxDoc" className="h-12 w-auto object-contain" />
-                    <div>
-                      <h2 className="text-xl font-extrabold text-slate-900 dark:text-white font-outfit">
-                        PraxDoc
-                      </h2>
-                      <p className="text-[10px] text-slate-450 uppercase tracking-widest font-bold">
-                        PraxDoc Workspace
-                      </p>
-                    </div>
+                <div className="flex justify-between items-start border-b border-slate-200 pb-3 print:pb-2 dark:border-slate-800">
+                  <div className="flex items-center">
+                    <img src="/logo.png" alt="Zenith Core Alliance" className="h-12 w-auto object-contain print:h-10" />
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex flex-col items-end justify-center">
                     <span className="text-xs font-mono font-bold bg-slate-100 text-slate-800 px-3 py-1.5 rounded dark:bg-slate-800 dark:text-slate-200">
                       {printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
                     </span>
@@ -805,9 +797,12 @@ Thank you for choosing PraxDoc!
                 </div>
 
                 {/* Calculation Summary Footer block */}
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200 dark:border-slate-850">
-                  <div className="text-[10px] text-slate-450 italic flex items-end">
-                    * All rates are listed in Indian Rupees (INR). Status is: {String(printableInvoice.payment_status).toUpperCase()}.
+                <div className="grid grid-cols-2 gap-4 pt-3 print:pt-2 border-t border-slate-200 dark:border-slate-850">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium flex flex-col justify-end">
+                    <span>Thankalam road, Muniyara</span>
+                    <span>Nellikuzhy P O, Kothamangalam, 686691</span>
+                    <span>Mobile +91 8289900665</span>
+                    <span>zenithcorealliance@gmail.com</span>
                   </div>
                   
                   <div className="space-y-1.5 text-xs font-mono">
@@ -842,7 +837,7 @@ Thank you for choosing PraxDoc!
                 </div>
 
                 <div className="text-center text-[10px] text-slate-450 dark:text-slate-500 border-t border-slate-100 pt-4 dark:border-slate-800/60 font-medium">
-                  Thank you for choosing PraxDoc!
+                  Thank you for choosing Zenith Core Alliance!
                 </div>
 
               </div>

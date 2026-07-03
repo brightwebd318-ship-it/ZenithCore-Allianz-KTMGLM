@@ -69,3 +69,9 @@ input::placeholder, textarea::placeholder {
   color: #64748b;
 }
 
+@media print {
+  @page { margin: 0; }
+  body { margin: 1.6cm; }
+  /* Ensure links are just text and don't show URLs */
+  a[href]:after { content: none !important; }
+}

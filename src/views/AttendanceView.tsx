@@ -106,6 +106,34 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
     };
   }, [modalMode]);
 
+  // Pre-fill manual form if record exists
+  useEffect(() => {
+    if (modalMode === 'manual') {
+      const targetStaffId = selectedStaffId || currentUser?.id;
+      if (targetStaffId && manualDate) {
+        const existing = attendanceLogs.find(l => l.user_id === targetStaffId && l.date === manualDate);
+        if (existing) {
+          const cin = new Date(existing.check_in);
+          setManualCheckIn(`${String(cin.getHours()).padStart(2, '0')}:${String(cin.getMinutes()).padStart(2, '0')}`);
+          
+          if (existing.check_out) {
+            const cout = new Date(existing.check_out);
+            setManualCheckOut(`${String(cout.getHours()).padStart(2, '0')}:${String(cout.getMinutes()).padStart(2, '0')}`);
+          } else {
+            setManualCheckOut('');
+          }
+          setManualStatus(existing.status);
+          setManualNotes(existing.notes || '');
+        } else {
+          setManualCheckIn('09:00');
+          setManualCheckOut('');
+          setManualStatus('PRESENT');
+          setManualNotes('');
+        }
+      }
+    }
+  }, [selectedStaffId, manualDate, attendanceLogs, modalMode, currentUser]);
+
   const handleMarkManual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStaffId && !canManageAttendance) {
