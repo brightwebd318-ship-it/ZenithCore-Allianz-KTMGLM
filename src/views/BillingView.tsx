@@ -682,7 +682,7 @@ CGST (9%): ₹${printableInvoice.cgst_rate > 0 ? printableInvoice.computed_tax_a
 SGST (9%): ₹${printableInvoice.sgst_rate > 0 ? printableInvoice.computed_tax_amount / 2 : 0}
 Grand Total: ₹${printableInvoice.total_amount}
 --------------------------------------------------
-Thank you for choosing Zenith Core Alliance!
+Thank you for choosing ${localStorage.getItem('praxdoc_tenant_logo_name') || 'our clinic'}!
 `;
                     const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
@@ -715,7 +715,7 @@ Thank you for choosing Zenith Core Alliance!
                 {/* Header branding */}
                 <div className="flex justify-between items-start border-b border-slate-200 pb-3 print:pb-2 dark:border-slate-800">
                   <div className="flex items-center">
-                    <img src="/logo.png" alt="Zenith Core Alliance" className="h-12 w-auto object-contain print:h-10" />
+                    <img src="/logo.png" alt={localStorage.getItem('praxdoc_tenant_logo_name') || "Clinic"} className="h-12 w-auto object-contain print:h-10" />
                   </div>
                   <div className="text-right flex flex-col items-end justify-center">
                     <span className="text-xs font-mono font-bold bg-slate-100 text-slate-800 px-3 py-1.5 rounded dark:bg-slate-800 dark:text-slate-200">
@@ -837,7 +837,7 @@ Thank you for choosing Zenith Core Alliance!
                 </div>
 
                 <div className="text-center text-[10px] text-slate-450 dark:text-slate-500 border-t border-slate-100 pt-4 dark:border-slate-800/60 font-medium">
-                  Thank you for choosing Zenith Core Alliance!
+                  Thank you for choosing {localStorage.getItem('praxdoc_tenant_logo_name') || 'our clinic'}!
                 </div>
 
               </div>

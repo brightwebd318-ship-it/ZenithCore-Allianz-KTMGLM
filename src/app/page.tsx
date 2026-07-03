@@ -104,6 +104,7 @@ export default function Home() {
         setOnboardingOpen(true);
       } else {
         setIsFirstTimeSetup(false);
+        setOnboardingOpen(false);
       }
     } catch (err) {
       console.error('Failed to retrieve tenant settings:', err);
