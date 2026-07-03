@@ -42,6 +42,8 @@ import {
   getSystemNotificationsAction,
   markNotificationAsReadAction,
   deleteScheduledSessionAction,
+  addSystemNotificationAction,
+  clearSystemNotificationsAction,
   wipeCompletedTasksAction,
   getTenantResourceMetricsAction,
   initializeTenantAction,
@@ -213,13 +215,13 @@ type SubscriptionCallback = (payload: any) => void;
 const subscribers: { [key: string]: { [id: string]: SubscriptionCallback } } = {
   scheduled_sessions: {},
   todo_tasks: {},
-  notifications: {},
+  system_notifications: {},
 };
 
-export const subscribeToTable = (table: 'scheduled_sessions' | 'todo_tasks' | 'notifications', callback: SubscriptionCallback) => {
+export const subscribeToTable = (table: 'scheduled_sessions' | 'todo_tasks' | 'system_notifications', callback: SubscriptionCallback) => {
   const subId = generateUUID();
   
-  if (table === 'notifications') {
+  if (table === 'system_notifications') {
     if (!subscribers[table]) subscribers[table] = {};
     subscribers[table][subId] = callback;
     return () => {
@@ -240,14 +242,9 @@ export const subscribeToTable = (table: 'scheduled_sessions' | 'todo_tasks' | 'n
     }
 };
 
-const notifySubscribers = (table: 'scheduled_sessions' | 'todo_tasks' | 'notifications', eventType: 'INSERT' | 'UPDATE' | 'DELETE', record: any) => {
-  const payload = {
-    eventType,
-    new: eventType !== 'DELETE' ? record : {},
-    old: eventType !== 'INSERT' ? { id: record.id } : {},
-  };
+const notifySubscribers = (table: 'scheduled_sessions' | 'todo_tasks' | 'system_notifications', eventType: 'INSERT' | 'UPDATE' | 'DELETE', record: any) => {
   if (subscribers[table]) {
-    Object.values(subscribers[table]).forEach((cb) => cb(payload));
+    Object.values(subscribers[table]).forEach(callback => callback({ eventType, record }));
   }
 };
 
@@ -1064,7 +1061,25 @@ export const dataService = {
 
     {
       const token = await getAuthToken();
-      return addInvoiceAction(token, newInvoice);
+      const res = await addInvoiceAction(token, newInvoice);
+      
+      // Notify admins of new bill
+      try {
+        const users = await dataService.getUsers();
+        const admins = users.filter((u: any) => u.position_role === 'Admin');
+        for (const admin of admins) {
+          await dataService.addNotification({
+            user_id: admin.id,
+            title: 'New Bill Generated',
+            description: `A new bill was generated for ₹${total_amount.toLocaleString('en-IN')} by ${loggedInUser?.full_name || 'System'}.`,
+            target_id: newInvoice.id,
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to notify admins of new bill:", err);
+      }
+      
+      return res;
       }
   },
 
@@ -1280,6 +1295,28 @@ export const dataService = {
       try {
               const token = await getAuthToken();
               await addAuditTrailAction(token, dbRow);
+              
+              const isSuspect = actionType.includes('FAIL') || 
+                                actionType.includes('SUSPECT') || 
+                                actionType.includes('SECURITY') || 
+                                actionType.includes('DELETE') || 
+                                actionType.includes('REVOKE');
+              if (isSuspect) {
+                try {
+                  const users = await dataService.getUsers();
+                  const admins = users.filter((u: any) => u.position_role === 'Admin');
+                  for (const admin of admins) {
+                    await dataService.addNotification({
+                      user_id: admin.id,
+                      title: 'Security Alert: Suspected Activity',
+                      description: `Audit Log Alert: ${description}`,
+                      target_id: dbRow.id,
+                    });
+                  }
+                } catch (notifErr) {
+                  console.warn("Failed to notify admins of suspected activity:", notifErr);
+                }
+              }
             } catch (err: any) {
               console.error("Failed to insert audit trail into Supabase system_audit_trails. Error message: " + err.message);
             }
@@ -1787,11 +1824,34 @@ export const dataService = {
   },
 
 
-  // NOTIFICATIONS STUBS
-  getNotifications: async (userId: string): Promise<any[]> => [],
-  addNotification: async (n: any): Promise<any> => n,
-  clearNotifications: async (userId: string): Promise<void> => {},
-  markNotificationsRead: async (userId: string): Promise<void> => {},
+  // NOTIFICATIONS
+  getNotifications: async (userId: string): Promise<any[]> => {
+    const token = await getAuthToken();
+    const all = await getSystemNotificationsAction(token);
+    return all.filter((n: any) => n.user_id === userId);
+  },
+  addNotification: async (n: any): Promise<any> => {
+    const token = await getAuthToken();
+    const tenant = await dataService.getTenant();
+    const notification = {
+      ...n,
+      tenant_id: tenant.id
+    };
+    return await addSystemNotificationAction(token, notification);
+  },
+  clearNotifications: async (userId: string): Promise<void> => {
+    const token = await getAuthToken();
+    await clearSystemNotificationsAction(token);
+  },
+  markNotificationsRead: async (userId: string): Promise<void> => {
+    const token = await getAuthToken();
+    const unread = await dataService.getNotifications(userId);
+    for (const n of unread) {
+      if (!n.is_read) {
+        await markNotificationAsReadAction(token, n.id);
+      }
+    }
+  },
 
   // SERVICES STUBS
   getServices: async (): Promise<any[]> => {

@@ -584,7 +584,18 @@ export async function updateScheduledSessionStatusAction(accessToken: string, se
 // 12. NOTIFICATIONS
 export async function getSystemNotificationsAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase.from('notifications').select('*');
+  const { data, error } = await supabase.from('system_notifications').select('*').order('created_at', { ascending: false }).limit(20);
+  if (error) throw error;
+  return data;
+}
+
+export async function addSystemNotificationAction(accessToken: string, notification: any) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { data, error } = await supabase
+    .from('system_notifications')
+    .insert(notification)
+    .select()
+    .single();
   if (error) throw error;
   return data;
 }
@@ -592,13 +603,22 @@ export async function getSystemNotificationsAction(accessToken: string) {
 export async function markNotificationAsReadAction(accessToken: string, notificationId: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const { data, error } = await supabase
-    .from('notifications')
+    .from('system_notifications')
     .update({ is_read: true })
     .eq('id', notificationId)
     .select()
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function clearSystemNotificationsAction(accessToken: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { error } = await supabase
+    .from('system_notifications')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all for this tenant
+  if (error) throw error;
 }
 
 // 13. SPECIAL GATE: Verify and link tenant (for onboarding wizard)

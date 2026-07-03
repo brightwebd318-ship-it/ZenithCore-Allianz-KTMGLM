@@ -119,7 +119,7 @@ export const Layout: React.FC<LayoutProps> = ({
   }, [tenant]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToTable('notifications', (payload) => {
+    const unsubscribe = subscribeToTable('system_notifications', (payload) => {
       loadNotificationsAndBranding();
     });
     return () => {
