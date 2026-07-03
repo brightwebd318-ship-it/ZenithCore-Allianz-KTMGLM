@@ -72,7 +72,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
     const fetchPatients = async () => {
       setLoading(true);
       try {
-        const data = await patientsSearch(searchQuery);
+        const data = await dataService.getPatients(); // Fetch all
         setPatients(data);
         if (data.length > 0 && !selectedPatient) {
           setSelectedPatient(data[0]);
@@ -86,7 +86,20 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
       }
     };
     fetchPatients();
-  }, [searchQuery, triggerRefreshKey]);
+  }, [triggerRefreshKey]);
+
+  // Client-side filtering
+  const filteredPatients = patients.filter((p) => {
+    if (!searchQuery) return true;
+    const sq = searchQuery.toLowerCase();
+    const gName = p.resource_fhir?.name?.[0]?.given?.[0]?.toLowerCase() || '';
+    const fName = p.resource_fhir?.name?.[0]?.family?.toLowerCase() || '';
+    const phone = p.resource_fhir?.telecom?.find((t: any) => t.system === 'phone')?.value?.toLowerCase() || '';
+    const email = p.resource_fhir?.telecom?.find((t: any) => t.system === 'email')?.value?.toLowerCase() || '';
+    const abha = p.abha_number?.toLowerCase() || '';
+    
+    return gName.includes(sq) || fName.includes(sq) || phone.includes(sq) || email.includes(sq) || abha.includes(sq);
+  });
 
   const isAdmin = currentUser?.position_role === 'Admin';
   const canToggleDetails = currentUser?.can_view_personal_data;
@@ -178,9 +191,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const patientsSearch = async (query: string) => {
-    return await dataService.getPatients(query);
-  };
+  // Removed patientsSearch since we filter locally
 
   // DPDP Consent Toggle (Withdrawal)
   const handleWithdrawConsent = async (patientId: string) => {
@@ -470,12 +481,12 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                   <tr>
                     <td colSpan={3} className="text-center py-6 text-sm text-slate-400">Loading patients ledger...</td>
                   </tr>
-                ) : patients.length === 0 ? (
+                ) : filteredPatients.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="text-center py-6 text-sm text-slate-400">No patients matching filters.</td>
                   </tr>
                 ) : (
-                  patients.map((p) => {
+                  filteredPatients.map((p) => {
                     const isSelected = selectedPatient?.id === p.id;
                     const givenName = p.resource_fhir?.name?.[0]?.given?.[0] || 'Unknown';
                     const familyName = p.resource_fhir?.name?.[0]?.family || '';

@@ -390,14 +390,14 @@ export const Layout: React.FC<LayoutProps> = ({
                 className="flex items-center space-x-3 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all focus:outline-none"
               >
                 <div className="h-8 w-8 rounded-full bg-brand-500 text-white flex items-center justify-center font-bold text-sm shadow">
-                  {currentUser && currentUser.full_name ? currentUser.full_name[0].toUpperCase() : 'A'}
+                  {currentUser ? (currentUser.full_name ? currentUser.full_name[0].toUpperCase() : 'U') : <div className="h-full w-full rounded-full bg-slate-300 dark:bg-slate-700 animate-pulse"></div>}
                 </div>
                 <div className="text-left hidden md:block">
                   <span className="block text-xs font-extrabold text-slate-800 dark:text-white">
-                    {currentUser ? currentUser.full_name : 'Loading...'}
+                    {currentUser ? currentUser.full_name : <span className="inline-block h-3 w-16 bg-slate-200 dark:bg-slate-700 rounded animate-pulse"></span>}
                   </span>
                   <span className="block text-[10px] font-bold text-slate-400">
-                    {currentUser ? currentUser.position_role : 'Clinic Head'}
+                    {currentUser ? currentUser.position_role : <span className="inline-block h-2 w-12 bg-slate-100 dark:bg-slate-800 rounded animate-pulse mt-1"></span>}
                   </span>
                 </div>
                 <ChevronDown className="h-3.5 w-3.5 text-slate-400" />

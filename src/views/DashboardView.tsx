@@ -297,7 +297,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 dark:bg-[#111827] dark:border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between shadow-sm relative overflow-hidden transition-all duration-200 space-y-4 md:space-y-0">
         <div className="z-10">
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-            Welcome back, {currentUser?.full_name || 'Specialist'}!
+            Welcome back, {currentUser ? currentUser.full_name : <span className="animate-pulse bg-slate-200 dark:bg-slate-700 h-6 w-32 rounded inline-block ml-2 align-middle"></span>}!
           </h1>
           <p className="text-xs text-slate-400 mt-1">PraxDoc Workspace Panel</p>
         </div>

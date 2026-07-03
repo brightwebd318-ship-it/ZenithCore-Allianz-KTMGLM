@@ -481,22 +481,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
               {modalMode === 'qr' && (
                 <div className="flex flex-col items-center text-center space-y-4">
                   
-                  {/* Canvas Viewfinder */}
-                  <div className="relative border border-slate-350 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-950">
-                    <canvas
-                      ref={canvasRef}
-                      width={300}
-                      height={240}
-                      className="block max-w-full"
-                    />
-                    {qrScanning && (
-                      <div className="absolute inset-0 bg-slate-950/80 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-500 mx-auto" />
-                          <span className="block text-[10px] text-white mt-2 font-mono">SCANNING VERIFICATION TOKEN...</span>
-                        </div>
-                      </div>
-                    )}
+                  {/* Real QR Viewfinder */}
+                  <div className="relative border border-slate-350 dark:border-slate-700 rounded-lg overflow-hidden bg-white w-full max-w-sm">
+                    <div id="qr-reader" className="w-full text-black"></div>
                   </div>
 
                   {/* QR Scan Results */}
