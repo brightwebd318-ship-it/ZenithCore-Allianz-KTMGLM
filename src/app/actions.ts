@@ -343,7 +343,7 @@ export async function deleteClinicalLogAction(accessToken: string, logId: string
 }
 
 // 6. INVOICES
-export async function getInvoicesAction(accessToken: string, dateFilter?: string) {
+export async function getInvoicesAction(accessToken: string, fromDate?: string, toDate?: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const tenantId = await getTenantIdFromToken(supabase);
   let query = supabase
@@ -352,10 +352,14 @@ export async function getInvoicesAction(accessToken: string, dateFilter?: string
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false });
 
-  if (dateFilter) {
+  if (fromDate && toDate) {
     query = query
-      .gte('created_at', `${dateFilter}T00:00:00.000Z`)
-      .lte('created_at', `${dateFilter}T23:59:59.999Z`);
+      .gte('created_at', `${fromDate}T00:00:00.000Z`)
+      .lte('created_at', `${toDate}T23:59:59.999Z`);
+  } else if (fromDate) {
+    query = query
+      .gte('created_at', `${fromDate}T00:00:00.000Z`)
+      .lte('created_at', `${fromDate}T23:59:59.999Z`);
   }
 
   const { data, error } = await query;
@@ -441,6 +445,23 @@ export async function addExpenseAction(accessToken: string, newExpensePayload: a
 export async function deleteExpenseAction(accessToken: string, expenseId: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const tenantId = await getTenantIdFromToken(supabase);
+  
+  const { data: expData, error: expErr } = await supabase
+    .from('business_expenses')
+    .select('bill_attachments')
+    .eq('id', expenseId)
+    .eq('tenant_id', tenantId)
+    .single();
+
+  if (!expErr && expData && expData.bill_attachments) {
+    const filePaths = (expData.bill_attachments as any[])
+      .filter((att) => att.filePath)
+      .map((att) => att.filePath);
+    if (filePaths.length > 0) {
+      await supabase.storage.from('PraxDocu').remove(filePaths);
+    }
+  }
+
   const { error } = await supabase
     .from('business_expenses')
     .delete()

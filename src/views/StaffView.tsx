@@ -624,58 +624,67 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
       {/* Add Staff modal */}
       {showAddForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in">
             <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center">
               <h3 className="font-bold text-sm">Add Staff Directory Profile</h3>
               <button onClick={() => setShowAddForm(false)} className="text-white/85 hover:text-white text-xs font-semibold">Close</button>
             </div>
             
             <form onSubmit={handleAddStaff} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                  placeholder="Dr. Ananya Sharma"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="Dr. Ananya Sharma"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    placeholder="ananya@PraxDoc.com"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                  placeholder="ananya@zenithcore.com"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mobile Number</label>
                   <input
                     type="text"
                     required
+                    pattern="[0-9]{10}"
+                    title="Must be a 10 digit number"
+                    minLength={10}
+                    maxLength={10}
                     value={mobileNumber}
-                    onChange={(e) => setMobileNumber(e.target.value)}
+                    onChange={(e) => setMobileNumber(e.target.value.replace(/[^0-9]/g, ''))}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                    placeholder="e.g. +91 98765 43210"
+                    placeholder="e.g. 9876543210"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Aadhaar Card Number</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Aadhaar Card Number (Optional)</label>
                   <input
                     type="text"
-                    required
+                    pattern="[0-9]{12}"
+                    title="Must be exactly 12 digits if provided"
+                    minLength={12}
+                    maxLength={12}
                     value={aadhaar}
-                    onChange={(e) => setAadhaar(e.target.value)}
+                    onChange={(e) => setAadhaar(e.target.value.replace(/[^0-9]/g, ''))}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                    placeholder="e.g. 1234-5678-9012"
+                    placeholder="e.g. 123456789012"
                   />
                 </div>
               </div>
@@ -692,7 +701,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Primary Emergency Contact Name</label>
                   <input
@@ -709,10 +718,14 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                   <input
                     type="text"
                     required
+                    pattern="[0-9]{10}"
+                    title="Must be a 10 digit number"
+                    minLength={10}
+                    maxLength={10}
                     value={primaryContactPhone}
-                    onChange={(e) => setPrimaryContactPhone(e.target.value)}
+                    onChange={(e) => setPrimaryContactPhone(e.target.value.replace(/[^0-9]/g, ''))}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                    placeholder="e.g. +91 99999 88888"
+                    placeholder="e.g. 9999988888"
                   />
                 </div>
               </div>
@@ -906,7 +919,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
                   className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                  placeholder="ananya@zenithcore.com"
+                  placeholder="ananya@PraxDoc.com"
                 />
               </div>
 

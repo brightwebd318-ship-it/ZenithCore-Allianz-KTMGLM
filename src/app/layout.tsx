@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Zenith Core Alliance - Multi-Tenant Medical SaaS Portal",
+  title: "PraxDoc - Multi-Tenant Medical SaaS Portal",
   description: "Secure, compliant multi-tenant SaaS dashboard for clinics and hospitals featuring patient management, doctor schedule allocations, automated billing, and detailed audit logs.",
-  keywords: ["Medical SaaS", "Healthcare Dashboard", "ABHA Verification", "DPDP Consent Management", "GST Billing", "Zenith Core Alliance"],
-  authors: [{ name: "Zenith Core Alliance Team" }],
+  keywords: ["Medical SaaS", "Healthcare Dashboard", "ABHA Verification", "DPDP Consent Management", "GST Billing", "PraxDoc"],
+  authors: [{ name: "PraxDoc Team" }],
 };
 
 export default function RootLayout({

@@ -269,7 +269,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
     setTimeout(async () => {
       try {
         const todayStr = new Date().toLocaleDateString('sv-SE');
-        const dailyToken = `ZENITH-AUTH-${todayStr}`;
+        const dailyToken = `PRAXDOC-AUTH-${todayStr}`;
         const response = await dataService.markAttendanceQR(currentUser.id, dailyToken);
         setQrScanning(false);
         setQrScanResult(response.success ? 'success' : 'already_marked');
@@ -299,7 +299,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             Welcome back, {currentUser?.full_name || 'Specialist'}!
           </h1>
-          <p className="text-xs text-slate-400 mt-1">Zenith Medical Workspace Alliance Panel</p>
+          <p className="text-xs text-slate-400 mt-1">PraxDoc Workspace Panel</p>
         </div>
         
         {/* Attendance status indicators on dashboard */}
@@ -343,7 +343,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
           {canGenerateQr && (
             <button
               onClick={() => setShowQrPortal(true)}
-              className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-colors flex items-center space-x-1"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-colors flex items-center space-x-1"
             >
               <QrCode className="h-4 w-4" />
               <span>QR Portal</span>
@@ -657,7 +657,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
                   ))}
                 </svg>
                 <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400">
-                  ZENITH-AUTH-{new Date().toLocaleDateString('sv-SE')}
+                  PRAXDOC-AUTH-{new Date().toLocaleDateString('sv-SE')}
                 </span>
               </div>
 

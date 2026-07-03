@@ -104,8 +104,8 @@ export const Layout: React.FC<LayoutProps> = ({
 
   useEffect(() => {
     if (tenant?.id) {
-      localStorage.setItem('zenith_tenant_logo_name', tenant.business_name);
-      const storedLogo = localStorage.getItem(`zenith_tenant_logo_${tenant.id}`);
+      localStorage.setItem('praxdoc_tenant_logo_name', tenant.business_name);
+      const storedLogo = localStorage.getItem(`praxdoc_tenant_logo_${tenant.id}`);
       if (storedLogo) {
         try {
           setLogoConfig(JSON.parse(storedLogo));
@@ -258,7 +258,7 @@ export const Layout: React.FC<LayoutProps> = ({
             >
               <img 
                 src="/logo.png" 
-                alt="Zenith Core Alliance Logo" 
+                alt="PraxDoc Logo" 
                 className="h-full w-full object-contain p-1.5 cursor-pointer"
               />
             </button>

@@ -139,14 +139,22 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
 
   const handleMarkManual = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStaffId) return;
+    if (!selectedStaffId && !canManageAttendance) {
+      // If user isn't admin and staff id is blank, use current user id
+      setSelectedStaffId(currentUser?.id || '');
+    }
+    
+    const targetStaffId = selectedStaffId || currentUser?.id;
+    if (!targetStaffId) return;
 
     try {
-      const checkInISO = new Date(`${manualDate}T${manualCheckIn}:00`).toISOString();
+      // If blank, use 00:00:00 local time
+      const finalCheckIn = manualCheckIn || '00:00';
+      const checkInISO = new Date(`${manualDate}T${finalCheckIn}:00`).toISOString();
       const checkOutISO = manualCheckOut ? new Date(`${manualDate}T${manualCheckOut}:00`).toISOString() : null;
 
       await dataService.markAttendance(
-        selectedStaffId,
+        targetStaffId,
         checkInISO,
         checkOutISO,
         manualStatus,
@@ -154,7 +162,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
         manualNotes
       );
 
-      const staffMember = staffList.find(s => s.id === selectedStaffId);
+      const staffMember = staffList.find(s => s.id === targetStaffId);
       const staffName = staffMember ? staffMember.full_name : 'Staff';
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Manually logged attendance for: ${staffName} on date: ${manualDate}`);
 
@@ -181,7 +189,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
     setTimeout(async () => {
       try {
         const todayStr = new Date().toLocaleDateString('sv-SE');
-        const dailyToken = `ZENITH-AUTH-${todayStr}`;
+        const dailyToken = `PRAXDOC-AUTH-${todayStr}`;
         const response = await dataService.markAttendanceQR(currentUser.id, dailyToken);
         setQrScanning(false);
         setQrScanResult(response.success ? 'success' : 'already_marked');
@@ -607,7 +615,6 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
                       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Check-in time</label>
                       <input
                         type="time"
-                        required
                         value={manualCheckIn}
                         onChange={(e) => setManualCheckIn(e.target.value)}
                         className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none"

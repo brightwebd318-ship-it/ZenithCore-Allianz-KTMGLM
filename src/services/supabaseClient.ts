@@ -8,7 +8,7 @@ export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 if (!isSupabaseConfigured) {
   throw new Error(
-    'CRITICAL ERROR: Supabase URL and/or Anon Key are missing. ZenithCore Medical SaaS requires a database connection to operate securely.'
+    'CRITICAL ERROR: Supabase URL and/or Anon Key are missing. PraxDoc Medical SaaS requires a database connection to operate securely.'
   );
 }
 

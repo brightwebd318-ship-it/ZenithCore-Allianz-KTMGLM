@@ -121,13 +121,13 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
 
       const stamp = new Date().toISOString().split('T')[0];
       
-      let sqlDump = `-- ZenithCore Medical SaaS Database Backup
+      let sqlDump = `-- PraxDoc Medical SaaS Database Backup
 -- Tenant ID: ${tenant.id} (${tenant.business_name})
 -- Generated At: ${new Date().toLocaleString('en-IN')}
 -- PostgreSQL Dump Utility compatible
 
-CREATE DATABASE IF NOT EXISTS zenithcore_alliance;
-\\c zenithcore_alliance
+CREATE DATABASE IF NOT EXISTS PraxDoc_alliance;
+\\c PraxDoc_alliance
 
 `;
 
@@ -156,7 +156,7 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
       });
 
       // Trigger download of backup file
-      triggerDownload(sqlDump, `zenithcore_backup_${stamp}.sql`, 'text/sql');
+      triggerDownload(sqlDump, `PraxDoc_backup_${stamp}.sql`, 'text/sql');
       
       await dataService.addAuditTrail('FINANCIAL_MUTATION', 'Generated full SQL system backup file');
       setSuccessMsg('Unified system SQL backup payload compiled and downloaded successfully!');
@@ -187,7 +187,7 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
       return;
     }
     
-    let logContent = `Zenith Core Alliance - System Audit Log File\n`;
+    let logContent = `PraxDoc - System Audit Log File\n`;
     logContent += `Generated At: ${new Date().toLocaleString('en-IN')}\n`;
     logContent += `========================================================\n\n`;
     
@@ -197,7 +197,7 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
     });
     
     const stamp = new Date().toISOString().split('T')[0];
-    triggerDownload(logContent, `zenith_audit_trail_${stamp}.log`, 'text/plain');
+    triggerDownload(logContent, `praxdoc_audit_trail_${stamp}.log`, 'text/plain');
   };
 
   const handleCreateService = async (e: React.FormEvent) => {

@@ -283,7 +283,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
         }
       } else {
         // Mock offline fallback
-        const mockUrl = `https://mock-storage.zenithcore.com/PraxDocu/${filePath}`;
+        const mockUrl = `https://mock-storage.PraxDoc.com/PraxDocu/${filePath}`;
         window.open(mockUrl, '_blank', 'noopener,noreferrer');
       }
     } catch (err: any) {
@@ -325,7 +325,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
           }];
         } else {
           // Fallback mock url for offline simulation
-          const mockUrl = `https://mock-storage.zenithcore.com/PraxDocu/${filePath}`;
+          const mockUrl = `https://mock-storage.PraxDoc.com/PraxDocu/${filePath}`;
           attachments = [{
             name: selectedFile.name,
             type: selectedFile.type,
@@ -1010,10 +1010,14 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                   <input
                     type="tel"
                     required
+                    pattern="[0-9]{10}"
+                    title="Must be a 10 digit number"
+                    minLength={10}
+                    maxLength={10}
                     value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
+                    onChange={(e) => setNewPhone(e.target.value.replace(/[^0-9]/g, ''))}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 focus:outline-none"
-                    placeholder="+91 99887 76655"
+                    placeholder="9988776655"
                   />
                 </div>
                 <div>
@@ -1187,7 +1191,7 @@ SGST (9%): ₹${printableInvoice.sgst_rate > 0 ? printableInvoice.computed_tax_a
 Grand Total: ₹${printableInvoice.total_amount}
 Payment Status: ${String(printableInvoice.payment_status).toUpperCase()}
 --------------------------------------------------
-Thank you for choosing Zenith Ortho-Rehab Care!
+Thank you for choosing PraxDoc Clinic!
 `;
                     const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
@@ -1221,10 +1225,10 @@ Thank you for choosing Zenith Ortho-Rehab Care!
                 <div className="flex justify-between items-start border-b border-slate-200 pb-4 dark:border-slate-800">
                   <div>
                     <h2 className="text-xl font-extrabold text-slate-900 dark:text-white font-outfit">
-                      {localStorage.getItem('zenith_tenant_logo_name') || 'Zenith Ortho-Rehab Care'}
+                      {localStorage.getItem('praxdoc_tenant_logo_name') || 'PraxDoc Clinic'}
                     </h2>
                     <p className="text-[10px] text-slate-450 uppercase tracking-widest font-bold">
-                      Zenith Medical Alliance Workspace
+                      PraxDoc Workspace
                     </p>
                   </div>
                   <div className="text-right">
@@ -1344,7 +1348,7 @@ Thank you for choosing Zenith Ortho-Rehab Care!
                 </div>
 
                 <div className="text-center text-[10px] text-slate-450 dark:text-slate-500 border-t border-slate-100 pt-4 dark:border-slate-800/60 font-medium">
-                  Thank you for choosing {localStorage.getItem('zenith_tenant_logo_name') || 'Zenith Ortho-Rehab Care'}!
+                  Thank you for choosing {localStorage.getItem('praxdoc_tenant_logo_name') || 'PraxDoc Clinic'}!
                 </div>
 
               </div>

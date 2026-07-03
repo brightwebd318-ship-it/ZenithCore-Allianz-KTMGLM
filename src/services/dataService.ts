@@ -1,5 +1,11 @@
 import { supabase } from './supabaseClient';
 import {
+    getServicesAction,
+  addServiceAction,
+  deleteServiceAction,
+  getAttendanceAction,
+  addAttendanceAction,
+  updateAttendanceAction,
   getTenantAction,
   updateTenantAction,
   getUsersAction,
@@ -248,9 +254,9 @@ const notifySubscribers = (table: 'scheduled_sessions' | 'todo_tasks' | 'notific
 // Initial mockup state seed
 const initialTenant: Tenant = {
   id: 'd1983024-bc48-4cb1-97b7-5f72e9dcfaea',
-  business_name: 'Zenith Ortho-Rehab Care',
+  business_name: 'PraxDoc Clinic',
   business_type: 'physiotherapy',
-  subdomain: 'zenithortho',
+  subdomain: 'praxdoc_clinic',
   max_db_storage_mb: 50,
   max_file_storage_mb: 200,
   clinic_start_time: '08:00',
@@ -263,7 +269,7 @@ const initialUsers: User[] = [
   {
     id: 'u1111111-1111-1111-1111-111111111111',
     tenant_id: initialTenant.id,
-    email: 'dibin@zenithcore.com',
+    email: 'dibin@PraxDoc.com',
     full_name: 'Dibin',
     position_role: 'Admin',
     medical_council_registration_no: 'IMR/KAR-283921',
@@ -280,7 +286,7 @@ const initialUsers: User[] = [
   {
     id: 'u2222222-2222-2222-2222-222222222222',
     tenant_id: initialTenant.id,
-    email: 'ananya@zenithcore.com',
+    email: 'ananya@PraxDoc.com',
     full_name: 'Dr. Ananya Sharma',
     position_role: 'Senior Therapist',
     medical_council_registration_no: 'IMR/KAR-981242',
@@ -297,7 +303,7 @@ const initialUsers: User[] = [
   {
     id: 'u3333333-3333-3333-3333-333333333333',
     tenant_id: initialTenant.id,
-    email: 'rohan@zenithcore.com',
+    email: 'rohan@PraxDoc.com',
     full_name: 'Rohan Mehta',
     position_role: 'Receptionist',
     medical_council_registration_no: '',
@@ -651,9 +657,9 @@ const getStorageItem = <T>(key: string, defaultValue: T): T => {
   if (typeof window === 'undefined') {
     return defaultValue;
   }
-  const data = localStorage.getItem(`zenith_${key}`);
+  const data = localStorage.getItem(`praxdoc_${key}`);
   if (!data) {
-    localStorage.setItem(`zenith_${key}`, JSON.stringify(defaultValue));
+    localStorage.setItem(`praxdoc_${key}`, JSON.stringify(defaultValue));
     return defaultValue;
   }
   return JSON.parse(data);
@@ -661,7 +667,7 @@ const getStorageItem = <T>(key: string, defaultValue: T): T => {
 
 const setStorageItem = <T>(key: string, value: T): void => {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(`zenith_${key}`, JSON.stringify(value));
+  localStorage.setItem(`praxdoc_${key}`, JSON.stringify(value));
 };
 
 
@@ -715,7 +721,10 @@ export const dataService = {
                 ...row,
                 can_manage_staff: row.resource_fhir?.can_manage_staff !== undefined
                   ? row.resource_fhir.can_manage_staff
-                  : (row.position_role === 'Admin')
+                  : (row.position_role === 'Admin'),
+                can_manage_attendance: row.resource_fhir?.can_manage_attendance !== undefined
+                  ? row.resource_fhir.can_manage_attendance
+                  : (row.position_role === 'Admin' || row.position_role === 'Receptionist')
               }));
             } catch (err) {
               console.warn("Error in getUsers:", err);
@@ -734,7 +743,10 @@ export const dataService = {
               ...data,
               can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
                 ? data.resource_fhir.can_manage_staff
-                : (data.position_role === 'Admin')
+                : (data.position_role === 'Admin'),
+              can_manage_attendance: data.resource_fhir?.can_manage_attendance !== undefined
+                ? data.resource_fhir.can_manage_attendance
+                : (data.position_role === 'Admin' || data.position_role === 'Receptionist')
             };
       }
   },
@@ -755,8 +767,11 @@ export const dataService = {
     if (updates.can_manage_staff !== undefined) {
       resourceFhir.can_manage_staff = updates.can_manage_staff;
     }
+    if (updates.can_manage_attendance !== undefined) {
+      resourceFhir.can_manage_attendance = updates.can_manage_attendance;
+    }
 
-    const { can_manage_staff, ...rest } = updates;
+    const { can_manage_staff, can_manage_attendance, ...rest } = updates;
     const dbPayload = {
       ...rest,
       resource_fhir: resourceFhir,
@@ -769,7 +784,10 @@ export const dataService = {
               ...data,
               can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
                 ? data.resource_fhir.can_manage_staff
-                : (data.position_role === 'Admin')
+                : (data.position_role === 'Admin'),
+              can_manage_attendance: data.resource_fhir?.can_manage_attendance !== undefined
+                ? data.resource_fhir.can_manage_attendance
+                : (data.position_role === 'Admin' || data.position_role === 'Receptionist')
             };
       }
   },
@@ -780,9 +798,10 @@ export const dataService = {
     const resourceFhir = {
       ...(user.resource_fhir || {}),
       can_manage_staff: user.can_manage_staff !== undefined ? user.can_manage_staff : (user.position_role === 'Admin'),
+      can_manage_attendance: user.can_manage_attendance !== undefined ? user.can_manage_attendance : (user.position_role === 'Admin' || user.position_role === 'Receptionist'),
     };
 
-    const { can_manage_staff, ...rest } = user;
+    const { can_manage_staff, can_manage_attendance, ...rest } = user;
     const newUser = {
       ...rest,
       id: user.id || generateUUID(),
@@ -798,7 +817,10 @@ export const dataService = {
               ...data,
               can_manage_staff: data.resource_fhir?.can_manage_staff !== undefined
                 ? data.resource_fhir.can_manage_staff
-                : (data.position_role === 'Admin')
+                : (data.position_role === 'Admin'),
+              can_manage_attendance: data.resource_fhir?.can_manage_attendance !== undefined
+                ? data.resource_fhir.can_manage_attendance
+                : (data.position_role === 'Admin' || data.position_role === 'Receptionist')
             };
       }
   },
@@ -943,10 +965,10 @@ export const dataService = {
   },
 
   // INVOICES
-  getInvoices: async (monthFilter?: string): Promise<Invoice[]> => {
+  getInvoices: async (fromDate?: string, toDate?: string): Promise<Invoice[]> => {
     {
       const token = await getAuthToken();
-      return getInvoicesAction(token);
+      return getInvoicesAction(token, fromDate, toDate);
       }
   },
 
@@ -1764,14 +1786,78 @@ export const dataService = {
   markNotificationsRead: async (userId: string): Promise<void> => {},
 
   // SERVICES STUBS
-  getServices: async (...args: any[]): Promise<any[]> => [],
-  addService: async (...args: any[]): Promise<any> => args[0],
-  deleteService: async (...args: any[]): Promise<void> => {},
+  getServices: async (): Promise<any[]> => {
+    const token = await getAuthToken();
+    return getServicesAction(token);
+  },
+  addService: async (name: string, price: number): Promise<any> => {
+    const token = await getAuthToken();
+    const tenant = await dataService.getTenant();
+    const newService = { name, price, tenant_id: tenant.id };
+    return addServiceAction(token, newService);
+  },
+  deleteService: async (serviceId: string): Promise<void> => {
+    const token = await getAuthToken();
+    await deleteServiceAction(token, serviceId);
+  },
 
   // ATTENDANCE STUBS
-  getAttendance: async (...args: any[]): Promise<any[]> => [],
-  markAttendance: async (...args: any[]): Promise<any> => args[0],
-  markAttendanceQR: async (...args: any[]): Promise<any> => args[0],
+  getAttendance: async (dateFilter?: string, staffId?: string): Promise<any[]> => {
+    const token = await getAuthToken();
+    return getAttendanceAction(token, dateFilter, staffId);
+  },
+  markAttendance: async (userId: string, checkInISO: string, checkOutISO: string | null, status: 'PRESENT' | 'ABSENT' | 'LATE', mode: 'QR' | 'MANUAL', notes?: string): Promise<any> => {
+    const token = await getAuthToken();
+    const tenant = await dataService.getTenant();
+    const targetDate = checkInISO.split('T')[0];
+    
+    const existing = await getAttendanceAction(token, targetDate, userId);
+    
+    const attendancePayload = { 
+      user_id: userId, 
+      check_in: checkInISO, 
+      check_out: checkOutISO, 
+      status, 
+      mode, 
+      notes, 
+      date: targetDate,
+      tenant_id: tenant.id
+    };
+
+    if (existing && existing.length > 0) {
+      return updateAttendanceAction(token, existing[0].id, attendancePayload);
+    } else {
+      return addAttendanceAction(token, attendancePayload);
+    }
+  },
+  markAttendanceQR: async (userId: string, type: 'CHECK_IN' | 'CHECK_OUT' | string): Promise<any> => {
+    const token = await getAuthToken();
+    const tenant = await dataService.getTenant();
+    const today = new Date().toISOString().split('T')[0];
+    const nowStr = new Date().toISOString();
+    
+    // Check existing
+    const existing = await getAttendanceAction(token, today, userId);
+    if (existing && existing.length > 0) {
+      if (type === 'CHECK_OUT') {
+        const payload = { ...existing[0], check_out: nowStr };
+        return updateAttendanceAction(token, existing[0].id, payload);
+      }
+      return existing[0]; // Already checked in
+    }
+    
+    if (type === 'CHECK_IN') {
+      const payload = {
+        tenant_id: tenant.id,
+        user_id: userId,
+        date: today,
+        check_in: nowStr,
+        status: 'PRESENT',
+        mode: 'QR'
+      };
+      return addAttendanceAction(token, payload);
+    }
+  },
 
   // TODO TASKS STUBS
   deleteTodoTask: async (...args: any[]): Promise<void> => {},

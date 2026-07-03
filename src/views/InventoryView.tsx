@@ -103,11 +103,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
       // Let's implement this! In mock, we can fetch items, modify, write.
       // Let's write a small custom helper in view or edit dataService.
       // Since it's mockup or Supabase, let's keep it simple:
-      const items = JSON.parse(localStorage.getItem('zenith_inventory') || '[]');
+      const items = JSON.parse(localStorage.getItem('praxdoc_inventory') || '[]');
       const idx = items.findIndex((i: any) => i.id === item.id);
       if (idx !== -1) {
         items[idx].sellable_via_invoice = !items[idx].sellable_via_invoice;
-        localStorage.setItem('zenith_inventory', JSON.stringify(items));
+        localStorage.setItem('praxdoc_inventory', JSON.stringify(items));
         await dataService.addAuditTrail('FINANCIAL_MUTATION', `Toggled sellability of product ID: ${item.id}`);
         triggerRefresh();
       }
@@ -156,7 +156,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
             name: selectedFile.name,
             type: selectedFile.type,
             size: selectedFile.size,
-            url: `https://mock-storage.zenithcore.com/PraxDocu/${filePath}`,
+            url: `https://mock-storage.PraxDoc.com/PraxDocu/${filePath}`,
             filePath: filePath
           }];
         }
@@ -245,7 +245,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
             name: editFile.name,
             type: editFile.type,
             size: editFile.size,
-            url: `https://mock-storage.zenithcore.com/PraxDocu/${filePath}`,
+            url: `https://mock-storage.PraxDoc.com/PraxDocu/${filePath}`,
             filePath: filePath
           }];
         }
@@ -585,6 +585,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Voucher Scan</label>
                 <input
                   type="file"
+                  accept=".pdf,.jpeg,.jpg"
                   onChange={(e) => {
                     const file = e.target.files?.[0] || null;
                     setSelectedFile(file);
@@ -670,6 +671,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Replace Voucher Scan</label>
                   <input
                     type="file"
+                    accept=".pdf,.jpeg,.jpg"
                     onChange={(e) => {
                       const file = e.target.files?.[0] || null;
                       setEditFile(file);

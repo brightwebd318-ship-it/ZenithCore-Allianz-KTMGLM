@@ -51,12 +51,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         onLoginSuccess();
       } else {
         // Simulate Login in offline Mock Mode
-        const localUsersData = localStorage.getItem('zenith_users');
+        const localUsersData = localStorage.getItem('praxdoc_users');
         const users = localUsersData ? JSON.parse(localUsersData) : [];
         
         // Default seeded developer credentials for easy mock test access
         const defaultAdmin = {
-          email: 'dibin@zenithcore.com',
+          email: 'dibin@PraxDoc.com',
           password: 'password',
         };
 
@@ -81,7 +81,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           }
 
           if (matchedUserId) {
-            const mockStatusesData = localStorage.getItem('zenith_mock_auth_statuses');
+            const mockStatusesData = localStorage.getItem('praxdoc_mock_auth_statuses');
             const mockStatuses = mockStatusesData ? JSON.parse(mockStatusesData) : [];
             const status = mockStatuses.find((s: any) => s.id === matchedUserId);
             if (status && status.paused) {
@@ -90,7 +90,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           }
 
           // Write a simulated session active token
-          localStorage.setItem('zenith_session', JSON.stringify({
+          localStorage.setItem('praxdoc_session', JSON.stringify({
             email: email.trim().toLowerCase(),
             loggedIn: true,
           }));
@@ -101,7 +101,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           }
           onLoginSuccess();
         } else {
-          throw new Error('Invalid credentials. (Mock fallback is: dibin@zenithcore.com / password)');
+          throw new Error('Invalid credentials. (Mock fallback is: dibin@PraxDoc.com / password)');
         }
       }
     } catch (err: any) {
@@ -126,7 +126,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         <div className="flex flex-col items-center justify-center mb-8">
           <img 
             src="/logo.png" 
-            alt="Zenith Core Alliance Logo" 
+            alt="PraxDoc Logo" 
             className="h-14 w-auto object-contain mb-2"
           />
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
@@ -167,7 +167,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-white dark:bg-slate-950/40 text-slate-900 dark:text-white pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
-                placeholder="doctor@zenithcore.com"
+                placeholder="doctor@PraxDoc.com"
               />
             </div>
           </div>

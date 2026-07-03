@@ -25,7 +25,10 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   const [selectedServiceId, setSelectedServiceId] = useState('custom');
 
   // Ledger Filter states
-  const [ledgerDateFilter, setLedgerDateFilter] = useState(() => {
+  const [ledgerFromDate, setLedgerFromDate] = useState(() => {
+    return new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+  });
+  const [ledgerToDate, setLedgerToDate] = useState(() => {
     return new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
   });
 
@@ -50,7 +53,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
   const loadBillingData = async () => {
     try {
-      const invs = await dataService.getInvoices(ledgerDateFilter || undefined);
+      const invs = await dataService.getInvoices(ledgerFromDate || undefined, ledgerToDate || undefined);
       setInvoices(invs);
       
       const pts = await dataService.getPatients();
@@ -80,7 +83,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
   useEffect(() => {
     loadBillingData();
-  }, [triggerRefreshKey, ledgerDateFilter]);
+  }, [triggerRefreshKey, ledgerFromDate, ledgerToDate]);
 
   // Update selected patient metadata dynamically
   useEffect(() => {
@@ -465,18 +468,26 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
           
           <div className="flex items-center space-x-2">
             <Calendar className="h-4 w-4 text-slate-400" />
+            <span className="text-xs text-slate-500 font-bold uppercase">From</span>
             <input
               type="date"
-              value={ledgerDateFilter}
-              onChange={(e) => setLedgerDateFilter(e.target.value)}
+              value={ledgerFromDate}
+              onChange={(e) => setLedgerFromDate(e.target.value)}
               className="rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
             />
-            {ledgerDateFilter && (
+            <span className="text-xs text-slate-500 font-bold uppercase">To</span>
+            <input
+              type="date"
+              value={ledgerToDate}
+              onChange={(e) => setLedgerToDate(e.target.value)}
+              className="rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+            />
+            {(ledgerFromDate || ledgerToDate) && (
               <button
-                onClick={() => setLedgerDateFilter('')}
-                className="text-xs text-brand-500 hover:text-brand-650 font-bold"
+                onClick={() => { setLedgerFromDate(''); setLedgerToDate(''); }}
+                className="text-xs text-brand-500 hover:text-brand-650 font-bold ml-2"
               >
-                Show All
+                Clear
               </button>
             )}
           </div>
@@ -649,7 +660,7 @@ SGST (9%): ₹${printableInvoice.sgst_rate > 0 ? printableInvoice.computed_tax_a
 Grand Total: ₹${printableInvoice.total_amount}
 Payment Status: ${String(printableInvoice.payment_status).toUpperCase()}
 --------------------------------------------------
-Thank you for choosing Zenith Core Alliance!
+Thank you for choosing PraxDoc!
 `;
                     const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
@@ -682,13 +693,13 @@ Thank you for choosing Zenith Core Alliance!
                 {/* Header branding */}
                 <div className="flex justify-between items-center border-b border-slate-200 pb-4 dark:border-slate-800">
                   <div className="flex items-center space-x-3">
-                    <img src="/logo.png" alt="Zenith Core Alliance" className="h-12 w-auto object-contain" />
+                    <img src="/logo.png" alt="PraxDoc" className="h-12 w-auto object-contain" />
                     <div>
                       <h2 className="text-xl font-extrabold text-slate-900 dark:text-white font-outfit">
-                        Zenith Core Alliance
+                        PraxDoc
                       </h2>
                       <p className="text-[10px] text-slate-450 uppercase tracking-widest font-bold">
-                        Zenith Medical Alliance Workspace
+                        PraxDoc Workspace
                       </p>
                     </div>
                   </div>
@@ -809,7 +820,7 @@ Thank you for choosing Zenith Core Alliance!
                 </div>
 
                 <div className="text-center text-[10px] text-slate-450 dark:text-slate-500 border-t border-slate-100 pt-4 dark:border-slate-800/60 font-medium">
-                  Thank you for choosing Zenith Core Alliance!
+                  Thank you for choosing PraxDoc!
                 </div>
 
               </div>

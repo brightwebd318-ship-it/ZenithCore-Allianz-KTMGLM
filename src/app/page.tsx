@@ -39,7 +39,7 @@ export default function Home() {
   // Always enforce light mode and clean up any dark preferences
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('zenith_theme');
+      localStorage.removeItem('praxdoc_theme');
       document.documentElement.classList.remove('dark');
     }
   }, []);
@@ -71,7 +71,7 @@ export default function Home() {
       };
     } else {
       // Mock mode session lookup
-      const session = localStorage.getItem('zenith_session');
+      const session = localStorage.getItem('praxdoc_session');
       if (session) {
         try {
           const parsed = JSON.parse(session);
@@ -150,7 +150,7 @@ export default function Home() {
       if (currentUser) {
         await dataService.addAuditTrail('CONSENT_CHANGED', `User logged out: ${currentUser.email} (${currentUser.full_name})`);
       } else {
-        const sessionStr = localStorage.getItem('zenith_session');
+        const sessionStr = localStorage.getItem('praxdoc_session');
         const session = sessionStr ? JSON.parse(sessionStr) : null;
         if (session?.email) {
           await dataService.addAuditTrail('CONSENT_CHANGED', `User logged out: ${session.email}`);
@@ -163,7 +163,7 @@ export default function Home() {
     if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut();
     } else {
-      localStorage.removeItem('zenith_session');
+      localStorage.removeItem('praxdoc_session');
       setIsAuthenticated(false);
     }
     setTenant(null);
@@ -274,7 +274,7 @@ export default function Home() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F7F9] dark:bg-[#0B0F19] transition-colors duration-200">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-500 mx-auto mb-4" />
-          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 font-outfit">Loading ZenithCore Alliance...</h2>
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 font-outfit">Loading PraxDoc...</h2>
           <p className="text-xs text-slate-400 mt-1">Verifying secure database credentials</p>
         </div>
       </div>

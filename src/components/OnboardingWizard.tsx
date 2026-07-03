@@ -44,7 +44,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 
   const [adminName, setAdminName] = useState(isFirstTimeSetup ? '' : 'Dibin');
   const [adminEmail, setAdminEmail] = useState(isFirstTimeSetup ? '' : 'dibin.head@nirvana.com');
-  const [adminPassword, setAdminPassword] = useState(isFirstTimeSetup ? '' : 'ZenithAdminSecure123');
+  const [adminPassword, setAdminPassword] = useState(isFirstTimeSetup ? '' : 'PraxDocAdminSecure123');
 
   // Clinic Logo States
   const [logoType, setLogoType] = useState<'preset' | 'url' | 'file'>('preset');
@@ -57,7 +57,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   React.useEffect(() => {
     const activeId = tenantId || '';
     if (activeId) {
-      const stored = localStorage.getItem(`zenith_tenant_logo_${activeId}`);
+      const stored = localStorage.getItem(`praxdoc_tenant_logo_${activeId}`);
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
@@ -98,15 +98,15 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           if (pwdErr) throw pwdErr;
         } else {
           // Update password in mock users
-          const users = localStorage.getItem('zenith_users') ? JSON.parse(localStorage.getItem('zenith_users')!) : [];
-          const sessionStr = localStorage.getItem('zenith_session');
+          const users = localStorage.getItem('praxdoc_users') ? JSON.parse(localStorage.getItem('praxdoc_users')!) : [];
+          const sessionStr = localStorage.getItem('praxdoc_session');
           if (sessionStr) {
             const session = JSON.parse(sessionStr);
             const user = users.find((u: any) => u.email.toLowerCase() === session.email.toLowerCase());
             if (user) {
               user.password = adminPassword;
               user.full_name = adminName;
-              localStorage.setItem('zenith_users', JSON.stringify(users));
+              localStorage.setItem('praxdoc_users', JSON.stringify(users));
             }
           }
         }
@@ -123,7 +123,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         });
 
         // 3. Save logo brand settings locally
-        localStorage.setItem(`zenith_tenant_logo_${tenantId}`, JSON.stringify({
+        localStorage.setItem(`praxdoc_tenant_logo_${tenantId}`, JSON.stringify({
           type: logoType,
           preset: logoPreset,
           url: logoUrl
@@ -146,7 +146,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         });
 
         if (newTenant?.id) {
-          localStorage.setItem(`zenith_tenant_logo_${newTenant.id}`, JSON.stringify({
+          localStorage.setItem(`praxdoc_tenant_logo_${newTenant.id}`, JSON.stringify({
             type: logoType,
             preset: logoPreset,
             url: logoUrl
@@ -341,7 +341,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         {logoType === 'preset' && (
           <div className="grid grid-cols-5 gap-2">
             {[
-              { name: 'blue', label: 'Zenith Blue', icon: Activity, bg: 'bg-blue-600' },
+              { name: 'blue', label: 'PraxDoc Blue', icon: Activity, bg: 'bg-blue-600' },
               { name: 'teal', label: 'Teal Health', icon: Heart, bg: 'bg-teal-500' },
               { name: 'indigo', label: 'Indigo Care', icon: Stethoscope, bg: 'bg-indigo-650' },
               { name: 'emerald', label: 'Emerald Life', icon: CheckSquare, bg: 'bg-emerald-600' },
