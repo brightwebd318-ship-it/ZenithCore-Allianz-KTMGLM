@@ -1830,7 +1830,7 @@ export const dataService = {
       return addAttendanceAction(token, attendancePayload);
     }
   },
-  markAttendanceQR: async (userId: string, type: 'CHECK_IN' | 'CHECK_OUT' | string): Promise<any> => {
+  markAttendanceQR: async (userId: string, tokenString: string): Promise<any> => {
     const token = await getAuthToken();
     const tenant = await dataService.getTenant();
     const today = new Date().toISOString().split('T')[0];
@@ -1839,24 +1839,25 @@ export const dataService = {
     // Check existing
     const existing = await getAttendanceAction(token, today, userId);
     if (existing && existing.length > 0) {
-      if (type === 'CHECK_OUT') {
+      if (!existing[0].check_out) {
         const payload = { ...existing[0], check_out: nowStr };
-        return updateAttendanceAction(token, existing[0].id, payload);
+        await updateAttendanceAction(token, existing[0].id, payload);
+        return { success: true, message: 'Check-out successful!' };
       }
-      return existing[0]; // Already checked in
+      return { success: false, message: 'Attendance already marked and checked out for today.' };
     }
     
-    if (type === 'CHECK_IN') {
-      const payload = {
-        tenant_id: tenant.id,
-        user_id: userId,
-        date: today,
-        check_in: nowStr,
-        status: 'PRESENT',
-        mode: 'QR'
-      };
-      return addAttendanceAction(token, payload);
-    }
+    // Check in
+    const payload = {
+      tenant_id: tenant.id,
+      user_id: userId,
+      date: today,
+      check_in: nowStr,
+      status: 'PRESENT',
+      mode: 'QR'
+    };
+    await addAttendanceAction(token, payload);
+    return { success: true, message: 'Check-in successful!' };
   },
 
   // TODO TASKS STUBS
