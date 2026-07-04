@@ -12,6 +12,7 @@ interface InventoryViewProps {
 export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, triggerRefreshKey }) => {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [expenses, setExpenses] = useState<BusinessExpense[]>([]);
+  const [expenseMonth, setExpenseMonth] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   // New Inventory Item Form
@@ -206,6 +207,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
   const handleDeleteExpense = async (expId: string, expName: string) => {
     if (!window.confirm(`Are you sure you want to delete the expense: ${expName}?`)) return;
     try {
+      const expToDelete = expenses.find(e => e.id === expId);
+      if (expToDelete?.bill_attachments && expToDelete.bill_attachments[0]?.filePath) {
+        if (isSupabaseConfigured && supabase) {
+          try {
+            await supabase.storage.from('PraxDocu').remove([expToDelete.bill_attachments[0].filePath]);
+          } catch (storageErr) {
+            console.warn("Storage deletion warning:", storageErr);
+          }
+        }
+      }
+
       await dataService.deleteExpense(expId);
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Deleted overhead expense: ${expName}`);
       triggerRefresh();
@@ -213,6 +225,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
     } catch (err) {
       console.error(err);
       alert("Failed to delete expense.");
+    }
+  };
+
+  const handleViewBill = async (attachment: any) => {
+    try {
+      if (isSupabaseConfigured && supabase && attachment.filePath) {
+        const { data, error } = await supabase.storage
+          .from('PraxDocu')
+          .createSignedUrl(attachment.filePath, 60);
+
+        if (error) throw error;
+        if (data?.signedUrl) {
+          window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+        } else {
+          throw new Error("Failed to generate signed URL");
+        }
+      } else if (attachment.url) {
+        // Fallback for mock urls
+        window.open(attachment.url, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to open document. Ensure the bucket 'PraxDocu' exists and access is permitted.");
     }
   };
 
@@ -303,7 +338,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
             <div className="flex items-center space-x-2">
               <Package className="h-5 w-5 text-brand-500" />
-              <h3 className="font-bold text-slate-900 dark:text-white">Clinical Stock Ledger</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white">Stock Data</h3>
             </div>
             <span className="text-[10px] bg-brand-50 border border-brand-100 px-2.5 py-0.5 rounded font-bold text-brand-600 dark:bg-brand-950/20 dark:border-brand-900/30">
               Active Inventory
@@ -331,7 +366,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                     <td colSpan={5} className="text-center py-6 text-slate-400">No stock ledger items found.</td>
                   </tr>
                 ) : (
-                  inventory.map((item) => (
+                  [...inventory].reverse().map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                       <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">{item.item_name}</td>
                       <td className="px-4 py-3.5">
@@ -383,7 +418,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
         {/* Add Inventory Form (Right 4 Columns) */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4 flex flex-col justify-between">
           <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
-            <Plus className="h-4 w-4 mr-1 text-brand-500" /> Catalog New Stock Item
+            <Plus className="h-4 w-4 mr-1 text-brand-500" /> Update New Stock
           </h4>
 
           <form onSubmit={handleAddInventory} className="space-y-4">
@@ -456,11 +491,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
             <div className="flex items-center space-x-2">
               <FileText className="h-5 w-5 text-indigo-500" />
-              <h3 className="font-bold text-slate-900 dark:text-white">Business Overhead ledger</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white">Business Expenses</h3>
             </div>
-            <span className="text-[10px] bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded font-bold text-indigo-600 dark:bg-indigo-950/20 dark:border-indigo-900/30">
-              Utility Outlays
-            </span>
+            <div className="flex items-center space-x-2">
+              <input
+                type="month"
+                value={expenseMonth}
+                onChange={(e) => setExpenseMonth(e.target.value)}
+                className="px-2 py-1 border border-slate-200 rounded text-xs text-slate-800 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+                title="Filter by month"
+              />
+              <span className="text-[10px] bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded font-bold text-indigo-600 dark:bg-indigo-950/20 dark:border-indigo-900/30">
+                Utility Outlays
+              </span>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -485,7 +529,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                     <td colSpan={5} className="text-center py-6 text-slate-400">No overhead expenses logged.</td>
                   </tr>
                 ) : (
-                  expenses.map((exp) => (
+                  [...expenses]
+                    .filter(exp => expenseMonth ? exp.expense_date.startsWith(expenseMonth) : true)
+                    .sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime())
+                    .map((exp) => (
                     <tr key={exp.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                       <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">{exp.expense_name}</td>
                       <td className="px-4 py-3.5">
@@ -508,16 +555,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                         ₹{exp.amount.toLocaleString('en-IN')}
                       </td>
                       <td className="px-4 py-3.5 text-right space-x-1.5 whitespace-nowrap">
-                        {exp.bill_attachments && exp.bill_attachments[0]?.url && (
-                          <a
-                            href={exp.bill_attachments[0].url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-brand-500 hover:text-brand-600 font-bold mr-1.5"
+                        {exp.bill_attachments && (exp.bill_attachments[0]?.url || exp.bill_attachments[0]?.filePath) && (
+                          <button
+                            onClick={() => handleViewBill(exp.bill_attachments![0])}
+                            className="text-brand-500 hover:text-brand-600 font-bold mr-1.5 focus:outline-none"
                             title="View Voucher"
                           >
-                            📎 View
-                          </a>
+                            View
+                          </button>
                         )}
                         <button
                           onClick={() => handleStartEditExpense(exp)}
@@ -545,7 +590,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
         {/* Add Expense Form (Right 4 Columns) */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
           <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
-            <Plus className="h-4 w-4 mr-1 text-brand-500" /> Log Overhead Utility
+            <Plus className="h-4 w-4 mr-1 text-brand-500" /> Expenses
           </h4>
 
           <form onSubmit={handleAddExpense} className="space-y-4">

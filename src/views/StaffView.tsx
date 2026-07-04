@@ -362,7 +362,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
               }}
               className="flex items-center bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow transition-colors"
             >
-              <Plus className="h-4 w-4 mr-1" /> Add Directory Profile
+              <Plus className="h-4 w-4 mr-1" /> Add New Staff
             </button>
           </div>
         )}
@@ -641,9 +641,9 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
       {/* Add Staff modal */}
       {showAddForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-4xl dark:bg-slate-900 dark:border-slate-800 overflow-hidden animate-in fade-in">
             <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center">
-              <h3 className="font-bold text-sm">Add Staff Directory Profile</h3>
+              <h3 className="font-bold text-sm">Add New Staff</h3>
               <button onClick={() => setShowAddForm(false)} className="text-white/85 hover:text-white text-xs font-semibold">Close</button>
             </div>
             
