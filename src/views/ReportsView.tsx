@@ -34,6 +34,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [cashflowMonth, setCashflowMonth] = useState<string>('');
+  const [isPrintingReport, setIsPrintingReport] = useState(false);
+
+  const handleDownloadPdf = () => {
+    setIsPrintingReport(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrintingReport(false);
+    }, 500);
+  };
 
   const loadReportsData = async () => {
     try {
@@ -156,7 +165,86 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      
+      {/* Printable Report Overlay */}
+      {isPrintingReport && (
+        <div className="fixed inset-0 bg-white z-[9999] p-10 overflow-y-auto text-black print:absolute print:inset-0 print:p-0 print:overflow-visible print:h-auto">
+          <div className="max-w-4xl mx-auto space-y-8">
+            <div className="text-center border-b pb-4 mb-6">
+              <h1 className="text-2xl font-bold font-outfit uppercase">Detailed Cashflow Report</h1>
+              <p className="text-sm font-semibold text-slate-600">Period: {cashflowMonth || 'All Time'}</p>
+            </div>
+            
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold bg-green-50 text-green-800 px-4 py-2 uppercase">Income (Invoices)</h2>
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-slate-800 uppercase font-bold text-xs">
+                    <th className="py-2 px-2">Date</th>
+                    <th className="py-2 px-2">Invoice #</th>
+                    <th className="py-2 px-2">Patient ID</th>
+                    <th className="py-2 px-2 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {filteredInvoices.map(inv => (
+                    <tr key={inv.id}>
+                      <td className="py-2 px-2">{new Date(inv.created_at).toLocaleDateString()}</td>
+                      <td className="py-2 px-2 font-mono">{inv.id.substring(0, 8)}</td>
+                      <td className="py-2 px-2 font-mono">{inv.patient_id.substring(0, 8)}...</td>
+                      <td className="py-2 px-2 text-right">{(inv.total_amount || 0).toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                  {filteredInvoices.length === 0 && <tr><td colSpan={4} className="text-center py-4">No income for this period.</td></tr>}
+                </tbody>
+                <tfoot>
+                  <tr className="font-bold border-t-2 border-slate-800">
+                    <td colSpan={3} className="py-2 px-2 text-right">Total Income:</td>
+                    <td className="py-2 px-2 text-right text-green-700">₹{totalIncome.toLocaleString('en-IN')}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold bg-red-50 text-red-800 px-4 py-2 uppercase mt-8">Expenses & Outflow</h2>
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-slate-800 uppercase font-bold text-xs">
+                    <th className="py-2 px-2">Date</th>
+                    <th className="py-2 px-2">Category</th>
+                    <th className="py-2 px-2">Description</th>
+                    <th className="py-2 px-2 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {filteredExpenses.map(exp => (
+                    <tr key={exp.id}>
+                      <td className="py-2 px-2">{exp.expense_date}</td>
+                      <td className="py-2 px-2">{exp.category}</td>
+                      <td className="py-2 px-2">{exp.expense_name}</td>
+                      <td className="py-2 px-2 text-right">{(exp.amount || 0).toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                  {filteredExpenses.length === 0 && <tr><td colSpan={4} className="text-center py-4">No expenses for this period.</td></tr>}
+                </tbody>
+                <tfoot>
+                  <tr className="font-bold border-t-2 border-slate-800">
+                    <td colSpan={3} className="py-2 px-2 text-right">Total Expenses:</td>
+                    <td className="py-2 px-2 text-right text-red-700">₹{totalExpenses.toLocaleString('en-IN')}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            
+            <div className="mt-8 text-right space-y-2 border-t pt-4">
+              <p className="text-lg font-bold">Net Balance: <span className={(totalIncome - totalExpenses) >= 0 ? 'text-green-700' : 'text-red-700'}>₹{(totalIncome - totalExpenses).toLocaleString('en-IN')}</span></p>
+              <p className="text-xs text-slate-500">Report generated on {new Date().toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Premium Report Sub-Tabs */}
       <div className="flex border-b border-slate-200 dark:border-slate-800 mb-2">
@@ -199,7 +287,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
                 <PieChart className="h-5 w-5 text-indigo-500" />
                 <h3 className="font-bold text-slate-900 dark:text-white font-outfit">Cashflow & Financial Allocations Distribution</h3>
               </div>
-              <div>
+              <div className="flex items-center space-x-2">
                 <input
                   type="month"
                   value={cashflowMonth}
@@ -207,6 +295,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
                   className="px-3 py-1.5 border border-slate-200 rounded text-xs text-slate-800 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
                   title="Filter by month"
                 />
+                <button
+                  onClick={handleDownloadPdf}
+                  className="px-3 py-1.5 bg-brand-500 text-white font-bold rounded text-xs shadow hover:bg-brand-600 transition-colors"
+                >
+                  Download PDF
+                </button>
               </div>
             </div>
 

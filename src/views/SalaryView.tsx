@@ -136,10 +136,8 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
     if (!confirmPay) return;
 
     try {
-      // Determine last day of target month for expense date alignment
-      const [year, month] = targetMonth.split('-');
-      const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-      const expenseDate = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
+      // Use today's exact date as requested
+      const expenseDate = new Date().toISOString().split('T')[0];
 
       await dataService.addExpense({
         expense_name: `Salary Payout - ${member.full_name} (${targetMonth})`,

@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   description: "Secure, compliant medical dashboard for clinics and hospitals featuring patient management, doctor schedule allocations, automated billing, and detailed audit logs.",
   keywords: ["Medical Dashboard", "Healthcare Dashboard", "ABHA Verification", "DPDP Consent Management", "GST Billing", "Zenith Core Alliance"],
   authors: [{ name: "Zenith Core Alliance" }],
+  icons: {
+    icon: '/zenithtab.png',
+  },
 };
 
 export default function RootLayout({

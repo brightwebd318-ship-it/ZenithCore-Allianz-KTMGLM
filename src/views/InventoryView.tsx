@@ -88,6 +88,25 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
         'FINANCIAL_MUTATION',
         `Adjusted stock of product '${item.item_name}' (ID: ${itemId}) from ${item.stock_count} to ${nextStock}`
       );
+      
+      // Restock notification logic
+      if (nextStock < 5) {
+        try {
+          const users = await dataService.getUsers();
+          const adminsAndHeads = users.filter((u: any) => u.position_role === 'Admin' || u.position_role === 'Senior Therapist');
+          for (const user of adminsAndHeads) {
+            await dataService.addNotification({
+              user_id: user.id,
+              title: 'Low Stock Alert',
+              description: `Inventory for '${item.item_name}' has reached critically low levels (${nextStock} remaining). Please restock.`,
+              target_id: itemId,
+            });
+          }
+        } catch (notifErr) {
+          console.warn("Failed to send restock notifications:", notifErr);
+        }
+      }
+      
       triggerRefresh();
     } catch (err) {
       console.error(err);
@@ -582,7 +601,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Voucher Scan</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Bill</label>
                 <input
                   type="file"
                   accept=".pdf,.jpeg,.jpg"
@@ -668,7 +687,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Replace Voucher Scan</label>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Replace Bill</label>
                   <input
                     type="file"
                     accept=".pdf,.jpeg,.jpg"

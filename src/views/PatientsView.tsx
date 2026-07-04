@@ -479,7 +479,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:bg-slate-800/40 dark:border-slate-800">
                   <th className="px-4 py-3">Patient Name / Gender</th>
-                  <th className="px-4 py-3">ABHA Code</th>
+                  <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
@@ -518,11 +518,11 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="font-semibold font-mono text-xs text-slate-700 dark:text-slate-300">
-                            {p.abha_number ? (showDetails && isSelected ? p.abha_number : '••••-••••-••••-••••') : 'Not Linked'}
+                          <span className="font-semibold text-xs text-slate-700 dark:text-slate-300">
+                            {p.resource_fhir?.telecom?.find((t: any) => t.system === 'phone')?.value ? (showDetails && isSelected ? p.resource_fhir.telecom.find((t: any) => t.system === 'phone').value : '••••••••••') : 'No Phone'}
                           </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            {p.abha_address ? (showDetails && isSelected ? p.abha_address : '••••••••@abdm') : 'No Address'}
+                          <span className="block text-[10px] text-slate-400 mt-0.5 truncate max-w-[150px]">
+                            {p.resource_fhir?.telecom?.find((t: any) => t.system === 'email')?.value ? (showDetails && isSelected ? p.resource_fhir.telecom.find((t: any) => t.system === 'email').value : '••••@••••.com') : 'No Email'}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-right">
