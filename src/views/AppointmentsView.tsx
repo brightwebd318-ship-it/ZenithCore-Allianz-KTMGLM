@@ -55,6 +55,8 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
 
   // Pagination & Filtering
   const [filterStatus, setFilterStatus] = useState<'all' | 'scheduled' | 'completed' | 'cancelled'>('all');
+  const [filterAssignee, setFilterAssignee] = useState<string>('');
+  const [filterPatient, setFilterPatient] = useState<string>('');
   const [visibleCount, setVisibleCount] = useState<number>(10);
 
   const loadSessionsData = async () => {
@@ -143,6 +145,18 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
         end_time: endIso,
         session_notes: notes,
       });
+
+      // Notification to assignee
+      if (staffId && staffId !== currentUser?.id) {
+        const patient = patients.find(p => p.id === patientId);
+        const pName = patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0] || ''} ${patient.resource_fhir?.name?.[0]?.family || ''}`.trim() || 'Unknown Patient' : 'Unknown Patient';
+        await dataService.addNotification({
+          user_id: staffId,
+          title: 'New Appointment Booked',
+          description: `An appointment with ${pName} was booked for you on ${localStart.toLocaleString()} by ${currentUser?.full_name || 'an administrator'}`,
+        });
+      }
+
 
       // Clear note
       setNotes('');
@@ -253,6 +267,19 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
         'READ_PATIENT',
         `Marked appointment session for patient ${patientName} as ${status === 'completed' ? 'Completed/Done' : 'Cancelled'}`
       );
+      
+      // Notify admins if completed
+      if (status === 'completed') {
+        const adminUsers = staff.filter(u => u.position_role === 'Admin' && u.id !== currentUser?.id);
+        const docName = staff.find((s) => s.id === session.practitioner_id)?.full_name || 'Specialist';
+        for (const admin of adminUsers) {
+          await dataService.addNotification({
+            user_id: admin.id,
+            title: 'Appointment Completed',
+            description: `Appointment for ${patientName} with ${docName} was marked as completed.`,
+          });
+        }
+      }
       
       // Send notification to admins
       await notifyAdmins(status === 'completed' ? 'COMPLETED' : 'CANCELLED', session);
@@ -403,6 +430,24 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
             ))}
           </div>
 
+          {/* Text Filters */}
+          <div className="flex items-center space-x-3 mb-2">
+            <input 
+              type="text" 
+              placeholder="Filter by Assignee..." 
+              value={filterAssignee}
+              onChange={(e) => setFilterAssignee(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-md text-xs w-48 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+            />
+            <input 
+              type="text" 
+              placeholder="Filter by Patient..." 
+              value={filterPatient}
+              onChange={(e) => setFilterPatient(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-md text-xs w-48 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+            />
+          </div>
+
           <div className="space-y-3">
             {loading ? (
               <p className="text-slate-400 text-center py-6 text-sm">Loading clinic schedules...</p>
@@ -413,8 +458,20 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
               </div>
             ) : (
               (() => {
-                const filtered = sessions.filter(s => filterStatus === 'all' || s.status === filterStatus);
-                const sorted = [...filtered].sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+                const filtered = sessions.filter(s => {
+                  if (filterStatus !== 'all' && s.status !== filterStatus) return false;
+                  
+                  const patient = patients.find(p => p.id === s.patient_id);
+                  const doc = staff.find(st => st.id === s.practitioner_id);
+                  const pName = patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0] || ''} ${patient.resource_fhir?.name?.[0]?.family || ''}`.trim() : '';
+                  const dName = doc ? doc.full_name : '';
+
+                  if (filterAssignee && !dName.toLowerCase().includes(filterAssignee.toLowerCase())) return false;
+                  if (filterPatient && !pName.toLowerCase().includes(filterPatient.toLowerCase())) return false;
+                  
+                  return true;
+                });
+                const sorted = [...filtered].sort((a, b) => new Date(b.created_at || a.start_time).getTime() - new Date(a.created_at || b.start_time).getTime());
                 const visible = sorted.slice(0, visibleCount);
 
                 return (

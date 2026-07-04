@@ -180,6 +180,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
         created_by: creatorId,
       });
 
+      if (taskAssignee && taskAssignee !== currentUser?.id) {
+        await dataService.addNotification({
+          user_id: taskAssignee,
+          title: 'New Task Assigned',
+          description: `You have been assigned a new task: "${taskTitle}" by ${currentUser?.full_name || 'an administrator'}`,
+        });
+      }
+
       setTaskTitle('');
       setTaskDesc('');
       setShowTaskForm(false);

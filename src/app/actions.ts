@@ -400,6 +400,13 @@ export async function getInventoryAction(accessToken: string) {
   return data;
 }
 
+export async function deleteInventoryItemAction(accessToken: string, itemId: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { error } = await supabase.from('inventory').delete().eq('id', itemId);
+  if (error) throw error;
+  return true;
+}
+
 export async function addInventoryItemAction(accessToken: string, newItemPayload: any) {
   const supabase = createServerSupabaseClient(accessToken);
   const { data, error } = await supabase

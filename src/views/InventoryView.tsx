@@ -114,6 +114,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
     }
   };
 
+  const handleDeleteInventory = async (itemId: string, itemName: string) => {
+    if (!window.confirm(`Are you sure you want to delete the stock item: ${itemName}?`)) return;
+    try {
+      if ((dataService as any).deleteInventoryItem) {
+        await (dataService as any).deleteInventoryItem(itemId);
+      }
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Deleted stock item: ${itemName}`);
+      triggerRefresh();
+      loadInventoryData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete stock item.");
+    }
+  };
+
   const handleToggleSellable = async (item: InventoryItem) => {
     try {
       // In a real DB we'd update. We simulate this by rewriting in mock or database:
@@ -338,7 +353,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
             <div className="flex items-center space-x-2">
               <Package className="h-5 w-5 text-brand-500" />
-              <h3 className="font-bold text-slate-900 dark:text-white">Stock Data</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white">Stock Information</h3>
             </div>
             <span className="text-[10px] bg-brand-50 border border-brand-100 px-2.5 py-0.5 rounded font-bold text-brand-600 dark:bg-brand-950/20 dark:border-brand-900/30">
               Active Inventory
@@ -353,7 +368,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                   <th className="px-4 py-3">Units in Stock</th>
                   <th className="px-4 py-3">Unit Retail price</th>
                   <th className="px-4 py-3">Sellable via Invoice</th>
-                  <th className="px-4 py-3 text-right">Adjustment</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs text-slate-700 dark:divide-slate-800 dark:text-slate-300">
@@ -396,15 +411,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ triggerRefresh, tr
                       <td className="px-4 py-3.5 text-right space-x-1">
                         <button
                           onClick={() => handleAdjustStock(item.id, false)}
-                          className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700"
+                          className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded text-[10px] font-bold text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 mr-1"
                         >
                           -5
                         </button>
                         <button
                           onClick={() => handleAdjustStock(item.id, true)}
-                          className="px-2 py-0.5 bg-brand-50 border border-brand-200 rounded text-[10px] font-bold text-brand-600 hover:bg-brand-100 dark:bg-brand-950/20 dark:border-brand-900/30"
+                          className="px-2 py-0.5 bg-brand-50 border border-brand-200 rounded text-[10px] font-bold text-brand-600 hover:bg-brand-100 dark:bg-brand-950/20 dark:border-brand-900/30 mr-1"
                         >
                           +5
+                        </button>
+                        <button
+                          onClick={() => handleDeleteInventory(item.id, item.item_name)}
+                          className="px-2 py-0.5 bg-rose-50 border border-rose-200 rounded text-[10px] font-bold text-rose-600 hover:bg-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30"
+                          title="Delete Item"
+                        >
+                          Delete
                         </button>
                       </td>
                     </tr>

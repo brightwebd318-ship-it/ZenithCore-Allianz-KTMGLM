@@ -26,6 +26,7 @@ import {
   addInvoiceAction,
   updateInvoicePaymentStatusAction,
   getInventoryAction,
+  deleteInventoryItemAction,
   addInventoryItemAction,
   updateInventoryStockAction,
   getExpensesAction,
@@ -36,6 +37,7 @@ import {
   getTodoTasksAction,
   addTodoTaskAction,
   updateTodoTaskStatusAction,
+  deleteTodoTaskAction,
   getScheduledSessionsAction,
   addScheduledSessionAction,
   updateScheduledSessionStatusAction,
@@ -1119,6 +1121,13 @@ export const dataService = {
       }
   },
 
+  deleteInventoryItem: async (itemId: string): Promise<void> => {
+    {
+      const token = await getAuthToken();
+      await deleteInventoryItemAction(token, itemId);
+    }
+  },
+
   // EXPENSES
   getExpenses: async (): Promise<BusinessExpense[]> => {
     {
@@ -1929,7 +1938,12 @@ export const dataService = {
   },
 
   // TODO TASKS STUBS
-  deleteTodoTask: async (...args: any[]): Promise<void> => {},
+  deleteTodoTask: async (taskId: string): Promise<void> => {
+    {
+      const token = await getAuthToken();
+      await deleteTodoTaskAction(token, taskId);
+    }
+  },
 
   // CLINICAL LOGS STUBS
   softDeleteClinicalLog: async (...args: any[]): Promise<void> => {},
