@@ -1,6 +1,7 @@
 "use server";
 
 import { createServerSupabaseClient, createAdminSupabaseClient } from '../services/serverClient';
+import { enforceRateLimit } from '../services/rateLimit';
 import nodemailer from 'nodemailer';
 
 // 1. TENANTS
@@ -114,6 +115,7 @@ export async function createStaffAuthAction(
   tenantUuid?: string,
   targetUserId?: string
 ) {
+  await enforceRateLimit('strict');
   // 1. Authorize: Verify the caller is an Admin
   const userClient = createServerSupabaseClient(accessToken);
   const { data: profile, error: profileErr } = await userClient
@@ -566,6 +568,7 @@ export async function getScheduledSessionsAction(accessToken: string) {
 }
 
 export async function addScheduledSessionAction(accessToken: string, dbPayload: any) {
+  await enforceRateLimit('moderate');
   const supabase = createServerSupabaseClient(accessToken);
   const { data, error } = await supabase
     .from('scheduled_sessions')
@@ -690,6 +693,7 @@ export async function getTenantResourceMetricsAction(accessToken: string, tenant
 }
 
 export async function initializeTenantAction(newTenant: any, firstAdmin: any) {
+  await enforceRateLimit('strict');
   const supabase = createServerSupabaseClient();
   const { error: tErr } = await supabase.from('tenants').insert([newTenant]);
   if (tErr) throw tErr;
