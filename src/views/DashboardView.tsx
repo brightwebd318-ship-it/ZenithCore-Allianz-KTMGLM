@@ -237,7 +237,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
 
       const targetUserId = canManageAttendance ? selectedStaffId : currentUser.id;
 
-      await dataService.markAttendance(
+      const result = await dataService.markAttendance(
         targetUserId,
         checkInISO,
         checkOutISO,
@@ -246,17 +246,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         manualNotes
       );
 
-      const targetName = staffList.find(s => s.id === targetUserId)?.full_name || currentUser.full_name;
-      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Logged manual dashboard attendance for: ${targetName}`);
-      
+      if (result && result.success === false) {
+        alert(result.message);
+        return;
+      }
+
       setShowMarkModal(false);
       setModalMode('selection');
       setManualNotes('');
       setManualCheckOut('');
       
       fetchDashboardData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`Error: ${err.message || err.details || JSON.stringify(err)}`);
     }
   };
 
@@ -453,7 +456,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
                   setQrScanResult(null);
                   setQrSuccessMessage(null);
                 }}
-                className="text-white hover:text-slate-100 text-xs font-bold font-mono"
+                className="text-white hover:text-slate-100 text-xs font-bold font-mono cursor-pointer"
               >
                 CLOSE
               </button>
@@ -521,14 +524,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
                   {!qrScanning && !qrScanResult && (
                     <button
                       onClick={simulateQRScan}
-                      className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1"
+                      className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1 cursor-pointer"
                     >
                       <Camera className="h-4.5 w-4.5" />
                       <span>Simulate Camera Scan</span>
                     </button>
                   )}
 
-                  <button onClick={() => { setModalMode('selection'); setQrScanResult(null); }} className="text-slate-400 text-xs font-semibold">
+                  <button onClick={() => { setModalMode('selection'); setQrScanResult(null); }} className="text-slate-400 text-xs font-semibold cursor-pointer">
                     Go Back
                   </button>
                 </div>
@@ -598,11 +601,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
                     />
                   </div>
                   <div className="flex space-x-2 pt-2">
-                    <button type="button" onClick={() => setModalMode('selection')} className="w-1/2 border border-slate-200 rounded-lg py-2">
+                    <button type="button" onClick={() => setModalMode('selection')} className="w-1/2 border border-slate-200 rounded-lg py-2 cursor-pointer hover:bg-slate-50 transition-colors">
                       Go Back
                     </button>
-                    <button type="submit" className="w-1/2 bg-brand-500 text-white rounded-lg py-2">
-                      Log Presence
+                    <button type="submit" className="w-1/2 bg-brand-500 text-white rounded-lg py-2 cursor-pointer hover:bg-brand-600 transition-colors">
+                      Save Log Entry
                     </button>
                   </div>
                 </form>

@@ -150,7 +150,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
       const checkInISO = new Date(`${manualDate}T${finalCheckIn}:00`).toISOString();
       const checkOutISO = manualCheckOut ? new Date(`${manualDate}T${manualCheckOut}:00`).toISOString() : null;
 
-      await dataService.markAttendance(
+      const result = await dataService.markAttendance(
         targetStaffId,
         checkInISO,
         checkOutISO,
@@ -159,9 +159,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
         manualNotes
       );
 
+      if (result && result.success === false) {
+        alert(result.message);
+        return;
+      }
+
       const staffMember = staffList.find(s => s.id === targetStaffId);
       const staffName = staffMember ? staffMember.full_name : 'Staff';
-      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Manually logged attendance for: ${staffName} on date: ${manualDate}`);
 
       // Reset
       setShowMarkModal(false);
@@ -171,8 +175,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
       
       triggerRefresh();
       loadAttendanceData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`Error: ${err.message || err.details || JSON.stringify(err)}`);
     }
   };
 
@@ -541,7 +546,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
                   {!qrScanning && !qrScanResult && (
                     <button
                       onClick={() => simulateQRScan()}
-                      className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1"
+                      className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1 cursor-pointer"
                     >
                       <Camera className="h-4.5 w-4.5" />
                       <span>Scan Simulated Code</span>
@@ -554,7 +559,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
                       setQrScanResult(null);
                       setQrSuccessMessage(null);
                     }}
-                    className="text-slate-400 hover:text-slate-600 text-xs font-semibold uppercase"
+                    className="text-slate-400 hover:text-slate-600 text-xs font-semibold uppercase cursor-pointer"
                   >
                     Go Back
                   </button>
@@ -654,13 +659,13 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ triggerRefresh, 
                     <button
                       type="button"
                       onClick={() => setModalMode('selection')}
-                      className="w-1/2 border border-slate-200 text-slate-650 rounded-lg py-2 hover:bg-slate-50 font-bold transition-all"
+                      className="w-1/2 border border-slate-200 text-slate-650 rounded-lg py-2 hover:bg-slate-50 font-bold transition-all cursor-pointer"
                     >
                       Go Back
                     </button>
                     <button
                       type="submit"
-                      className="w-1/2 bg-brand-500 text-white rounded-lg py-2 hover:bg-brand-600 font-bold transition-all"
+                      className="w-1/2 bg-brand-500 text-white rounded-lg py-2 hover:bg-brand-600 font-bold transition-all cursor-pointer"
                     >
                       Save Log Entry
                     </button>

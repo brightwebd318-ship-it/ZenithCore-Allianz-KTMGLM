@@ -821,10 +821,12 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                       {patientInvoices.map((invoice, index) => {
                         const practitioner = staffList.find(s => s.id === invoice.associated_practitioner_id)?.full_name || 'Clinic Specialist';
                         const identifier = invoice.resource_fhir?.identifier?.[0]?.value || invoice.id;
-                        const formattedDate = new Date(invoice.created_at).toLocaleDateString('en-IN', {
+                        const formattedDate = new Date(invoice.created_at).toLocaleString('en-IN', {
                           day: '2-digit',
                           month: 'short',
-                          year: 'numeric'
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
                         });
                         
                         return (
@@ -1196,7 +1198,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
 ZENITH CORE CLINICAL RECEIPT
 --------------------------------------------------
 Invoice ID: ${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
-Date Generated: ${new Date(printableInvoice.created_at).toLocaleDateString('en-IN')}
+Date Generated: ${new Date(printableInvoice.created_at).toLocaleString('en-IN')}
 Patient Name: ${pName}
 Practitioner Name: ${practitioner}
 --------------------------------------------------
@@ -1259,7 +1261,7 @@ Thank you for choosing PraxDoc Clinic!
                       {printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
                     </span>
                     <span className="block text-[10px] text-slate-400 mt-2 font-bold uppercase font-mono">
-                      Date: {new Date(printableInvoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      Date: {new Date(printableInvoice.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 </div>

@@ -171,7 +171,7 @@ export interface BusinessExpense {
 export interface SystemAuditTrail {
   id: string;
   tenant_id: string;
-  action_type: 'SEARCH' | 'READ_PATIENT' | 'FINANCIAL_MUTATION' | 'CONSENT_CHANGED';
+  action_type: 'SEARCH' | 'READ_PATIENT' | 'FINANCIAL_MUTATION' | 'CONSENT_CHANGED' | 'ATTENDANCE_LOGGED';
   description: string;
   performed_by: string;
   created_at: string;
@@ -1902,9 +1902,17 @@ export const dataService = {
     };
 
     if (existing && existing.length > 0) {
-      return updateAttendanceAction(token, existing[0].id, attendancePayload);
+      if (!checkOutISO) {
+        return { success: false, message: "Attendance already logged. Please provide an exit (check-out) time to update the record." };
+      }
+      const payload = { ...existing[0], check_out: checkOutISO, status, mode, notes };
+      const result = await updateAttendanceAction(token, existing[0].id, payload);
+      await dataService.addAuditTrail('ATTENDANCE_LOGGED', `Manually updated check-out time for staff`);
+      return { success: true, data: result };
     } else {
-      return addAttendanceAction(token, attendancePayload);
+      const result = await addAttendanceAction(token, attendancePayload);
+      await dataService.addAuditTrail('ATTENDANCE_LOGGED', `Manually logged attendance status: ${status}`);
+      return { success: true, data: result };
     }
   },
   markAttendanceQR: async (userId: string, tokenString: string): Promise<any> => {
@@ -1919,21 +1927,26 @@ export const dataService = {
       if (!existing[0].check_out) {
         const payload = { ...existing[0], check_out: nowStr };
         await updateAttendanceAction(token, existing[0].id, payload);
+        await dataService.addAuditTrail('ATTENDANCE_LOGGED', `QR Code used for Check-Out`);
         return { success: true, message: 'Check-out successful!' };
       }
       return { success: false, message: 'Attendance already marked and checked out for today.' };
     }
     
-    // Check in
+    // Create new
     const payload = {
       tenant_id: tenant.id,
       user_id: userId,
       date: today,
       check_in: nowStr,
+      check_out: null,
       status: 'PRESENT',
-      mode: 'QR'
+      mode: 'QR',
+      notes: 'Auto-logged via QR system'
     };
+    
     await addAttendanceAction(token, payload);
+    await dataService.addAuditTrail('ATTENDANCE_LOGGED', `QR Code used for Check-In`);
     return { success: true, message: 'Check-in successful!' };
   },
 

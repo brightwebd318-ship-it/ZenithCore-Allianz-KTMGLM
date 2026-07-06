@@ -3,6 +3,18 @@
 import { createServerSupabaseClient, createAdminSupabaseClient } from '../services/serverClient';
 import { enforceRateLimit } from '../services/rateLimit';
 import nodemailer from 'nodemailer';
+import pdfMake from 'pdfmake';
+import fs from 'fs';
+import path from 'path';
+
+pdfMake.fonts = {
+  Helvetica: {
+    normal: 'Helvetica',
+    bold: 'Helvetica-Bold',
+    italics: 'Helvetica-Oblique',
+    bolditalics: 'Helvetica-BoldOblique'
+  }
+};
 
 // 1. TENANTS
 async function getTenantIdFromToken(supabase: any) {
@@ -899,23 +911,151 @@ export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: strin
     },
   });
 
+  const logoPath = path.join(process.cwd(), 'public', 'logo.png');
+  let logoDataUri = '';
+  try {
+    const logoBase64 = fs.readFileSync(logoPath).toString('base64');
+    logoDataUri = `data:image/png;base64,${logoBase64}`;
+  } catch (e) {
+    console.error('Failed to load logo for PDF', e);
+  }
+
+  const docDefinition: any = {
+    defaultStyle: { font: 'Helvetica', fontSize: 10, color: '#334155' },
+    content: [
+      {
+        columns: [
+          {
+            width: '*',
+            stack: [
+              ...(logoDataUri ? [{ image: logoDataUri, width: 140, margin: [0, 0, 0, 5] }] : [{ text: 'ZenithCore Alliance', fontSize: 20, bold: true, color: '#0f172a' }]),
+              { text: 'Mobile: +91 8289900665', fontSize: 8, color: '#64748b', bold: true, margin: [0, 2, 0, 0] }
+            ]
+          },
+          {
+            width: 'auto',
+            stack: [
+              { text: invoiceDetails.invoiceNum, fontSize: 10, bold: true, background: '#f1f5f9', color: '#1e293b', padding: 5 },
+              { text: `DATE: ${new Date(invoiceDetails.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).toUpperCase()}`, fontSize: 8, color: '#94a3b8', bold: true, margin: [0, 5, 0, 0] }
+            ],
+            alignment: 'right'
+          }
+        ],
+        margin: [0, 0, 0, 15]
+      },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#e2e8f0' }], margin: [0, 0, 0, 15] },
+      {
+        columns: [
+          {
+            width: '*',
+            stack: [
+              { text: 'BILLED TO (PATIENT)', fontSize: 8, bold: true, color: '#94a3b8', margin: [0, 0, 0, 4] },
+              { text: invoiceDetails.patientName, fontSize: 10, bold: true, color: '#1e293b' }
+            ]
+          },
+          {
+            width: '*',
+            stack: [
+              { text: 'BILLED BY', fontSize: 8, bold: true, color: '#94a3b8', margin: [0, 0, 0, 4] },
+              { text: invoiceDetails.practitionerName, fontSize: 10, bold: true, color: '#1e293b' }
+            ]
+          }
+        ],
+        margin: [0, 0, 0, 15]
+      },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#f1f5f9' }], margin: [0, 0, 0, 15] },
+      { text: 'ITEMIZED BREAKDOWN', fontSize: 8, bold: true, color: '#94a3b8', margin: [0, 0, 0, 5] },
+      {
+        table: {
+          headerRows: 1,
+          widths: ['*', 'auto', 'auto', 'auto'],
+          body: [
+            [
+              { text: 'Item Description', fillColor: '#f8fafc', color: '#64748b', bold: true, fontSize: 8, margin: [5, 5, 5, 5] },
+              { text: 'Rate', fillColor: '#f8fafc', color: '#64748b', bold: true, fontSize: 8, alignment: 'right', margin: [5, 5, 5, 5] },
+              { text: 'Qty', fillColor: '#f8fafc', color: '#64748b', bold: true, fontSize: 8, alignment: 'center', margin: [5, 5, 5, 5] },
+              { text: 'Line Total', fillColor: '#f8fafc', color: '#64748b', bold: true, fontSize: 8, alignment: 'right', margin: [5, 5, 5, 5] }
+            ],
+            ...invoiceDetails.lineItems.map((item: any) => [
+              { text: item.description, color: '#1e293b', bold: true, margin: [5, 5, 5, 5] },
+              { text: `INR ${Number(item.rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, margin: [5, 5, 5, 5], alignment: 'right' },
+              { text: item.quantity.toString(), alignment: 'center', margin: [5, 5, 5, 5] },
+              { text: `INR ${(item.quantity * item.rate).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, margin: [5, 5, 5, 5], alignment: 'right', bold: true, color: '#0f172a' }
+            ])
+          ]
+        },
+        layout: {
+          hLineWidth: function (i: number, node: any) { return (i === 0 || i === node.table.body.length) ? 1 : 1; },
+          vLineWidth: function (i: number, node: any) { return 1; },
+          hLineColor: function (i: number, node: any) { return '#f1f5f9'; },
+          vLineColor: function (i: number, node: any) { return '#f1f5f9'; }
+        },
+        margin: [0, 0, 0, 15]
+      },
+      {
+        columns: [
+          {
+            width: '*',
+            text: `* All rates are listed in Indian Rupees (INR). Status is: PAID.`,
+            italics: true,
+            fontSize: 8,
+            color: '#64748b',
+            margin: [0, 15, 0, 0]
+          },
+          {
+            width: 200,
+            stack: [
+              {
+                columns: [
+                  { text: 'Subtotal:', color: '#64748b' },
+                  { text: `INR ${Number(invoiceDetails.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, alignment: 'right', color: '#1e293b' }
+                ],
+                margin: [0, 0, 0, 5]
+              },
+              invoiceDetails.cgst > 0 ? {
+                columns: [
+                  { text: 'CGST (9.0%):', color: '#64748b', fontSize: 9 },
+                  { text: `INR ${Number(invoiceDetails.cgst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, alignment: 'right', color: '#64748b', fontSize: 9 }
+                ],
+                margin: [0, 0, 0, 2]
+              } : null,
+              invoiceDetails.sgst > 0 ? {
+                columns: [
+                  { text: 'SGST (9.0%):', color: '#64748b', fontSize: 9 },
+                  { text: `INR ${Number(invoiceDetails.sgst).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, alignment: 'right', color: '#64748b', fontSize: 9 }
+                ],
+                margin: [0, 0, 0, 5]
+              } : null,
+              { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 200, y2: 0, lineWidth: 1, lineColor: '#f1f5f9' }], margin: [0, 5, 0, 5] },
+              {
+                columns: [
+                  { text: 'GRAND TOTAL:', bold: true, color: '#0f172a', fontSize: 12 },
+                  { text: `INR ${Number(invoiceDetails.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, alignment: 'right', bold: true, color: '#0f172a', fontSize: 12 }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      { text: 'Thanks for choosing ZenithCore Alliance', italics: true, color: '#94a3b8', fontSize: 10, alignment: 'center', margin: [0, 30, 0, 0] }
+    ].filter(Boolean)
+  };
+
+  const pdfDoc = pdfMake.createPdf(docDefinition);
+  const pdfBuffer: Buffer = await pdfDoc.getBuffer();
+
   const mailOptions = {
-    from: `"Clinic Billing" <${SMTP_EMAIL}>`,
+    from: `"ZenithCore Billing" <${SMTP_EMAIL}>`,
     to: toEmail,
     subject: `Invoice Generated: ${invoiceDetails.invoiceNum}`,
-    html: `
-      <div style="font-family: sans-serif; max-width: 600px; margin: auto;">
-        <h2>Hello ${invoiceDetails.patientName},</h2>
-        <p>A new invoice has been generated for your recent visit.</p>
-        <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin: 16px 0;">
-          <p style="margin: 4px 0;"><strong>Invoice Number:</strong> ${invoiceDetails.invoiceNum}</p>
-          <p style="margin: 4px 0;"><strong>Date:</strong> ${new Date(invoiceDetails.created_at).toLocaleDateString()}</p>
-          <p style="margin: 4px 0;"><strong>Total Amount:</strong> ₹${invoiceDetails.total_amount}</p>
-          <p style="margin: 4px 0;"><strong>Status:</strong> ${invoiceDetails.status}</p>
-        </div>
-        <p>Thank you for choosing our clinic!</p>
-      </div>
-    `,
+    text: `Hello ${invoiceDetails.patientName},\n\nPlease find your clinical receipt (${invoiceDetails.invoiceNum}) attached to this email as a PDF.\n\nThanks for choosing ZenithCore Alliance`,
+    attachments: [
+      {
+        filename: `Invoice_${invoiceDetails.invoiceNum}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ]
   };
 
   await transporter.sendMail(mailOptions);

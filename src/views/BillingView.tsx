@@ -18,7 +18,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   // Form States
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState('');
-  const [sessionsCount, setSessionsCount] = useState<number | ''>(0);
+  const [sessionsCount, setSessionsCount] = useState<number | ''>(1);
   const [ratePerSession, setRatePerSession] = useState(1200);
 
   // Services Catalog list
@@ -154,7 +154,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
       // Reset
       setCustomItems([]);
-      setSessionsCount(0);
+      setSessionsCount(1);
       setSelectedServiceId('custom');
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Generated new invoice ledger trace for patient ID: ${selectedPatientId}`);
       
@@ -167,12 +167,30 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
         if (patientData && patientData.resource_fhir?.telecom) {
           const emailTelecom = patientData.resource_fhir.telecom.find((t: any) => t.system === 'email');
           if (emailTelecom && emailTelecom.value) {
+            const practitioner = staff.find(s => s.id === newInv.associated_practitioner_id)?.full_name || 'Clinic Specialist';
+            const lineItems = (newInv.resource_fhir?.lineItem || (
+              newInv.session_count_incremented > 0 ? [{
+                description: 'Therapy Session Units',
+                quantity: newInv.session_count_incremented,
+                priceComponent: [{ amount: { value: (newInv.total_amount - newInv.computed_tax_amount) / (newInv.session_count_incremented || 1) } }]
+              }] : []
+            )).map((item: any) => {
+              const qty = item.quantity || 1;
+              const rate = item.priceComponent?.[0]?.amount?.value || 0;
+              return { description: item.description, quantity: qty, rate: rate };
+            });
+
             const invoiceDetails = {
               invoiceNum: newInv.resource_fhir?.identifier?.[0]?.value || newInv.id,
               patientName: `${patientData.resource_fhir?.name?.[0]?.given?.[0]} ${patientData.resource_fhir?.name?.[0]?.family}`,
+              practitionerName: practitioner,
               created_at: newInv.created_at,
               total_amount: newInv.total_amount,
-              status: newInv.payment_status
+              subtotal: newInv.total_amount - newInv.computed_tax_amount,
+              cgst: newInv.cgst_rate > 0 ? newInv.computed_tax_amount / 2 : 0,
+              sgst: newInv.sgst_rate > 0 ? newInv.computed_tax_amount / 2 : 0,
+              status: newInv.payment_status,
+              lineItems: lineItems
             };
             await sendInvoiceEmailAction(invoiceDetails, emailTelecom.value);
             console.log("Invoice email sent to " + emailTelecom.value);
@@ -665,7 +683,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 ZENITH CORE ALLIANCE RECEIPT
 --------------------------------------------------
 Invoice ID: ${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
-Date Generated: ${new Date(printableInvoice.created_at).toLocaleDateString('en-IN')}
+Date Generated: ${new Date(printableInvoice.created_at).toLocaleString('en-IN')}
 Patient Name: ${pName}
 Practitioner Name: ${practitioner}
 --------------------------------------------------
@@ -722,7 +740,7 @@ Thank you for choosing ${localStorage.getItem('praxdoc_tenant_logo_name') || 'ou
                       {printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
                     </span>
                     <span className="block text-[10px] text-slate-400 mt-2 font-bold uppercase">
-                      Date: {new Date(printableInvoice.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      Date: {new Date(printableInvoice.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 </div>
