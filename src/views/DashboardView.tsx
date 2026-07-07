@@ -12,7 +12,7 @@ import {
   Camera,
   X
 } from 'lucide-react';
-import { dataService } from '../services/dataService';
+import { dataService, formatHours } from '../services/dataService';
 import type { Tenant, User as StaffUser, Attendance } from '../services/dataService';
 
 interface DashboardViewProps {
@@ -26,6 +26,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
   const [stats, setStats] = useState({
     patientsCount: 0,
     appointmentsCount: 0,
+    myTodaySessionsCount: 0,
     revenue: 0,
     myCompletedCount: 0,
     myCompletedHours: 0,
@@ -109,7 +110,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
 
       // Count appointments today in local timezone for active accounts
       const todayLocalStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
-      const todaySessions = appointments.filter((app) => {
+      const todaySessionsList = appointments.filter((app) => {
         const appLocalDate = new Date(app.start_time).toLocaleDateString('sv-SE');
         if (appLocalDate !== todayLocalStr) return false;
         
@@ -125,6 +126,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         if (patient && patient.resource_fhir?.active === false) return false;
 
         return true;
+      });
+
+      const todaySessions = todaySessionsList.length;
+      const myTodaySessionsCount = todaySessionsList.filter(app => app.practitioner_id === currentUser?.id).length;
+
+      // Count new patients registered this month (from 1st of the month)
+      const patientsThisMonth = patients.filter((patient) => {
+        if (!patient.created_at) return false;
+        const pDate = new Date(patient.created_at);
+        return pDate.getFullYear() === currentYear && pDate.getMonth() === currentMonth;
       }).length;
 
         // Count my completed sessions and hours (Current month only)
@@ -155,8 +166,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         }, 0);
 
       setStats({
-        patientsCount: patients.length,
+        patientsCount: patientsThisMonth,
         appointmentsCount: todaySessions,
+        myTodaySessionsCount,
         revenue: totalRevenue,
         myCompletedCount,
         myCompletedHours,
@@ -374,7 +386,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         {currentUser?.position_role === 'Admin' && (
           <div className="rounded-xl border border-slate-200/80 bg-white p-6 dark:bg-[#111827] dark:border-slate-800 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
             <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Active Patients</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">New Patients This Month</span>
               <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">
                 {loading ? '...' : stats.patientsCount}
               </h3>
@@ -395,9 +407,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         <div className="rounded-xl border border-slate-200/80 bg-white p-6 dark:bg-[#111827] dark:border-slate-800 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
           <div>
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Appointments Today</span>
-            <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">
-              {loading ? '...' : stats.appointmentsCount}
-            </h3>
+            <div className="flex items-baseline space-x-3 mt-1">
+              <h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">
+                {loading ? '...' : stats.appointmentsCount}
+              </h3>
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded flex items-center">
+                <span>For You:</span>
+                <span className="font-extrabold font-mono text-brand-500 dark:text-brand-400 ml-1">{loading ? '...' : stats.myTodaySessionsCount}</span>
+              </div>
+            </div>
             <button
               onClick={() => setActiveTab('Appointments')}
               className="text-brand-500 dark:text-brand-400 hover:text-brand-600 font-bold text-xs mt-2 flex items-center"
@@ -441,7 +459,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
                 Sessions: <span className="text-2xl font-extrabold text-slate-900 dark:text-white ml-1">{loading ? '...' : stats.myCompletedCount}</span>
               </div>
               <div className="text-sm font-bold text-slate-700 dark:text-slate-350">
-                Hours: <span className="text-2xl font-extrabold text-slate-900 dark:text-white ml-1">{loading ? '...' : stats.myCompletedHours.toFixed(1)}</span> <span className="text-xs font-normal text-slate-400 ml-0.5">hrs</span>
+                Hours: <span className="text-xl font-extrabold text-slate-900 dark:text-white ml-1">{loading ? '...' : formatHours(stats.myCompletedHours)}</span>
               </div>
             </div>
           </div>

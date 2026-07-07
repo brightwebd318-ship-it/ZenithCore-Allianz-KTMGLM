@@ -10,7 +10,7 @@ import {
   TrendingDown,
   DollarSign
 } from 'lucide-react';
-import { dataService } from '../services/dataService';
+import { dataService, formatHours } from '../services/dataService';
 import type { User as StaffUser, ScheduledSession, BusinessExpense, Invoice } from '../services/dataService';
 
 import { AttendanceView } from './AttendanceView';
@@ -574,7 +574,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
                       <td className="px-4 py-3 text-right font-mono font-extrabold text-slate-900 dark:text-white text-xs">
                         <span className="flex items-center justify-end space-x-1">
                           <Clock className="h-3.5 w-3.5 text-teal-500 inline-block" />
-                          <span>{stats.hours.toFixed(1)} hrs</span>
+                          <span>{formatHours(stats.hours)}</span>
                         </span>
                       </td>
                     </tr>

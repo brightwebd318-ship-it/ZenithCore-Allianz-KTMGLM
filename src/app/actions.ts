@@ -57,11 +57,25 @@ export async function getTenantAction(accessToken: string) {
 
 export async function updateTenantAction(accessToken: string, tenantData: any) {
   const supabase = createServerSupabaseClient(accessToken);
-  const current = await getTenantAction(accessToken);
-  const { data, error } = await supabase
+  const { data: { user }, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !user) throw new Error("No active auth session found");
+
+  const { data: profile, error: profileErr } = await supabase
+    .from('users')
+    .select('position_role, tenant_id')
+    .eq('id', user.id)
+    .single();
+    
+  if (profileErr || !profile) throw new Error("User profile not found");
+  if (profile.position_role !== 'Admin') {
+    throw new Error("Access denied: Only Admins can modify clinic configurations.");
+  }
+
+  const adminClient = createAdminSupabaseClient();
+  const { data, error } = await adminClient
     .from('tenants')
     .update(tenantData)
-    .eq('id', current.id)
+    .eq('id', profile.tenant_id)
     .select()
     .single();
   if (error) throw error;

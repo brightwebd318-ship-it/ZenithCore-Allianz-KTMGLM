@@ -72,6 +72,21 @@ export const generateUUID = () => {
   });
 };
 
+export const formatHours = (hoursDecimal: number): string => {
+  if (isNaN(hoursDecimal) || hoursDecimal <= 0) return '0 hr';
+  const totalMinutes = Math.round(hoursDecimal * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  
+  const hrStr = hours > 0 ? `${hours} hr` : '';
+  const minStr = minutes > 0 ? `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}` : '';
+  
+  if (hrStr && minStr) {
+    return `${hrStr} ${minStr}`;
+  }
+  return hrStr || minStr || '0 hr';
+};
+
 // Types corresponding exactly to PostgreSQL schema
 export interface Tenant {
   id: string;
@@ -117,6 +132,7 @@ export interface Patient {
   consent_timestamp: string;
   consent_withdrawal_requested: boolean;
   resource_fhir: any; // Patient v6.0
+  created_at?: string;
 }
 
 export interface ClinicalLog {

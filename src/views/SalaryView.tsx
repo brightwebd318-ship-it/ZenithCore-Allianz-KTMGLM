@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Banknote,
   Clock,
@@ -10,7 +10,7 @@ import {
   User,
   ShieldAlert
 } from 'lucide-react';
-import { dataService } from '../services/dataService';
+import { dataService, formatHours } from '../services/dataService';
 import type { User as StaffUser, Tenant, BusinessExpense } from '../services/dataService';
 
 interface SalaryViewProps {
@@ -24,6 +24,9 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [expenses, setExpenses] = useState<BusinessExpense[]>([]);
+
+  // Month input ref for native picker trigger
+  const monthInputRef = useRef<HTMLInputElement>(null);
 
   // Month select state (YYYY-MM format, defaulting to June 2026 based on workspace time context)
   const [targetMonth, setTargetMonth] = useState('2026-06');
@@ -232,13 +235,24 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
           )}
 
           {/* Target Month Input */}
-          <div className="flex items-center space-x-2">
-            <Calendar className="h-4 w-4 text-slate-450 dark:text-slate-400" />
+          <div 
+            className="flex items-center space-x-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 px-3 py-1.5 cursor-pointer"
+            onClick={() => {
+              try {
+                monthInputRef.current?.showPicker();
+              } catch (e) {
+                monthInputRef.current?.focus();
+              }
+            }}
+          >
+            <Calendar className="h-4 w-4 text-slate-450 dark:text-slate-450" />
             <input
+              ref={monthInputRef}
               type="month"
               value={targetMonth}
               onChange={(e) => setTargetMonth(e.target.value)}
-              className="rounded border border-slate-200 px-3 py-1.5 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500"
+              onClick={(e) => e.stopPropagation()}
+              className="text-xs bg-transparent text-slate-800 dark:text-slate-200 focus:outline-none border-none p-0 cursor-pointer"
             />
           </div>
 
@@ -331,8 +345,8 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
             <Clock className="h-5 w-5 text-teal-500" />
           </div>
           <div className="mt-2.5">
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white font-outfit">
-              {totalClinicalHours.toFixed(1)} hrs
+            <h3 className="text-xl font-black text-slate-900 dark:text-white font-outfit">
+              {formatHours(totalClinicalHours)}
             </h3>
             <p className="text-[10px] text-slate-400 mt-1 flex items-center space-x-1">
               <TrendingUp className="h-3 w-3 text-emerald-500" />
@@ -438,8 +452,8 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                       </td>
 
                       {/* Clinical Hours */}
-                      <td className="px-5 py-4 text-center font-semibold font-mono text-slate-600 dark:text-slate-300">
-                        {details.clinical_hours.toFixed(1)} hrs
+                      <td className="px-5 py-4 text-center font-semibold font-mono text-slate-600 dark:text-slate-300 text-xs">
+                        {formatHours(details.clinical_hours)}
                       </td>
 
                       {/* Individual Bonus Toggle switch */}
