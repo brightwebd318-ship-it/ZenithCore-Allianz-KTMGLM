@@ -692,22 +692,29 @@ const mapTodoTaskFromDb = (row: any): TodoTask => {
   };
 };
 
+let cachedTenant: Tenant | null = null;
+
 export const dataService = {
   // TENANTS
   getTenant: async (): Promise<Tenant> => {
+    if (cachedTenant) return cachedTenant;
     {
         const token = await getAuthToken();
         if (!token) {
                 throw new Error("No active auth token available on client.");
               }
-        return getTenantAction(token);
+        const tenant = await getTenantAction(token);
+        cachedTenant = tenant;
+        return tenant;
         }
   },
 
   updateTenant: async (tenant: Partial<Tenant>): Promise<Tenant> => {
     {
       const token = await getAuthToken();
-      return updateTenantAction(token, tenant);
+      const updated = await updateTenantAction(token, tenant);
+      cachedTenant = updated;
+      return updated;
       }
   },
 
@@ -1841,14 +1848,16 @@ export const dataService = {
     const all = await getSystemNotificationsAction(token);
     return all.filter((n: any) => n.user_id === userId);
   },
-  addNotification: async (n: any): Promise<any> => {
+  addNotification: async (n: Omit<SystemNotification, 'id' | 'tenant_id' | 'is_read' | 'created_at'>): Promise<SystemNotification> => {
     const token = await getAuthToken();
     const tenant = await dataService.getTenant();
     const notification = {
       ...n,
       tenant_id: tenant.id
     };
-    return await addSystemNotificationAction(token, notification);
+    const data = await addSystemNotificationAction(token, notification);
+    if (data && data.success === false) throw new Error(data.message);
+    return data;
   },
   clearNotifications: async (userId: string): Promise<void> => {
     const token = await getAuthToken();

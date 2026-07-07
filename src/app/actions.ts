@@ -613,13 +613,22 @@ export async function getSystemNotificationsAction(accessToken: string) {
 
 export async function addSystemNotificationAction(accessToken: string, notification: any) {
   const supabase = createServerSupabaseClient(accessToken);
-  const { data, error } = await supabase
-    .from('system_notifications')
-    .insert(notification)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
+  try {
+    const tenantId = await getTenantIdFromToken(supabase);
+    if (notification.tenant_id !== tenantId) {
+      return { success: false, message: "Unauthorized tenant access." };
+    }
+    const adminClient = createAdminSupabaseClient();
+    const { data, error } = await adminClient
+      .from('system_notifications')
+      .insert(notification)
+      .select()
+      .single();
+    if (error) return { success: false, message: error.message, details: error };
+    return { success: true, ...data };
+  } catch (err: any) {
+    return { success: false, message: err.message };
+  }
 }
 
 export async function markNotificationAsReadAction(accessToken: string, notificationId: string) {
