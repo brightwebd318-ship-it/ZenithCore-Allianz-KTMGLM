@@ -971,7 +971,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
               <button onClick={() => setShowAddForm(false)} className="text-white/80 hover:text-white text-sm font-bold">Close</button>
             </div>
             
-            <form onSubmit={handleAddPatient} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+            <form onSubmit={handleAddPatient} className="p-5 space-y-3 max-h-[88vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">First Name</label>

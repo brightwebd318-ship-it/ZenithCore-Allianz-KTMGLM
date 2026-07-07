@@ -647,7 +647,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
               <button onClick={() => setShowAddForm(false)} className="text-white/85 hover:text-white text-xs font-semibold">Close</button>
             </div>
             
-            <form onSubmit={handleAddStaff} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+            <form onSubmit={handleAddStaff} className="p-5 space-y-3 max-h-[88vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
@@ -915,7 +915,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
               <button onClick={() => setEditingUser(null)} className="text-white/85 hover:text-white text-xs font-semibold">Close</button>
             </div>
             
-            <form onSubmit={handleSaveEdit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+            <form onSubmit={handleSaveEdit} className="p-5 space-y-3 max-h-[88vh] overflow-y-auto">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
                 <input
