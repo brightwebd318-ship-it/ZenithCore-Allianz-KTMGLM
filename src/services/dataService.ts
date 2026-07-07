@@ -1854,7 +1854,8 @@ export const dataService = {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) throw new Error("No active user session found.");
       await completeOnboardingAction(token, tenantId, onboardingData, userData.user.id);
-      }
+      cachedTenant = null;
+    }
   },
 
 
@@ -1987,6 +1988,10 @@ export const dataService = {
 
   // CLINICAL LOGS STUBS
   softDeleteClinicalLog: async (...args: any[]): Promise<void> => {},
+  
+  clearCache: () => {
+    cachedTenant = null;
+  },
 };
 
 export interface Attendance {

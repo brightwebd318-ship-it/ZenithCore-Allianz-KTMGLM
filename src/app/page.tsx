@@ -60,10 +60,13 @@ export default function Home() {
         });
 
       // Listen for auth state changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         setIsAuthenticated(!!session);
         setAuthLoading(false);
-        triggerRefresh();
+        if (event !== 'USER_UPDATED' && event !== 'PASSWORD_RECOVERY') {
+          dataService.clearCache();
+          triggerRefresh();
+        }
       });
 
       return () => {
@@ -167,6 +170,7 @@ export default function Home() {
       localStorage.removeItem('praxdoc_session');
       setIsAuthenticated(false);
     }
+    dataService.clearCache();
     setTenant(null);
     setCurrentUser(null);
   };
@@ -298,6 +302,7 @@ export default function Home() {
             setIsAuthenticated(true);
             triggerRefresh();
           }}
+          isFirstTimeSetup={isFirstTimeSetup}
           tenantId={tenant?.id}
         />
       </>

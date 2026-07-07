@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { SystemAuditTrail, User as StaffUser, Tenant } from '../services/dataService';
-import { isSupabaseConfigured } from '../services/supabaseClient';
+import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 
 interface AdminControlsViewProps {
   triggerRefresh: () => void;
@@ -21,6 +21,7 @@ interface AdminControlsViewProps {
 
 export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRefresh }) => {
   const [loading, setLoading] = useState(false);
+  const [loadingFiles, setLoadingFiles] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   
 
@@ -166,6 +167,92 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDownloadFilesBackup = async () => {
+    setLoadingFiles(true);
+    setSuccessMsg(null);
+    try {
+      // 1. Dynamic load of JSZip from CDN
+      const JSZip: any = await new Promise((resolve, reject) => {
+        if ((window as any).JSZip) {
+          resolve((window as any).JSZip);
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        script.onload = () => resolve((window as any).JSZip);
+        script.onerror = (e) => reject(e);
+        document.head.appendChild(script);
+      });
+
+      const zip = new JSZip();
+      const tenant = await dataService.getTenant();
+      const patients = await dataService.getPatients();
+
+      // 2. Fetch/Download expense files
+      const expensePath = `expenses/${tenant.id}`;
+      const { data: expFiles, error: expErr } = await supabase.storage.from('PraxDocu').list(expensePath, { limit: 100 });
+      if (expErr) throw expErr;
+
+      if (expFiles && expFiles.length > 0) {
+        const folder = zip.folder('expenses');
+        for (const file of expFiles) {
+          if (file.id) {
+            const filePath = `${expensePath}/${file.name}`;
+            const { data: blob, error } = await supabase.storage.from('PraxDocu').download(filePath);
+            if (!error && blob) {
+              folder.file(file.name, blob);
+            }
+          }
+        }
+      }
+
+      // 3. Fetch/Download patient files
+      if (patients && patients.length > 0) {
+        const patientsFolder = zip.folder('patients');
+        for (const patient of patients) {
+          const patientPath = `patients/${patient.id}`;
+          const { data: patFiles, error: patErr } = await supabase.storage.from('PraxDocu').list(patientPath, { limit: 100 });
+          if (!patErr && patFiles && patFiles.length > 0) {
+            const patientSubfolder = patientsFolder.folder(patient.id);
+            for (const file of patFiles) {
+              if (file.id) {
+                const filePath = `${patientPath}/${file.name}`;
+                const { data: blob, error } = await supabase.storage.from('PraxDocu').download(filePath);
+                if (!error && blob) {
+                  patientSubfolder.file(file.name, blob);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 4. Generate zip file and trigger download
+      const content = await zip.generateAsync({ type: 'blob' });
+      const stamp = new Date().toISOString().split('T')[0];
+      const zipName = `PraxDoc_files_backup_${stamp}.zip`;
+
+      const url = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = zipName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', 'Generated full files ZIP backup');
+      setSuccessMsg('All files compiled into a ZIP archive and downloaded successfully!');
+      triggerRefresh();
+      loadAdminData();
+    } catch (err: any) {
+      console.error("Backup files failed:", err);
+      alert("Failed to compile file backup: " + (err.message || err));
+    } finally {
+      setLoadingFiles(false);
     }
   };
 
@@ -449,14 +536,34 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
           Compile and package structure schemas along with active table rows into a unified SQL database state file. Ideal for localized offline archiving.
         </p>
 
-        <button
-          onClick={handleGenerateBackup}
-          disabled={loading}
-          className="inline-flex items-center bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-4 py-2.5 rounded-lg shadow transition-all disabled:opacity-50 font-semibold"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          {loading ? 'Compiling Schema...' : 'Generate Full System Backup (.sql)'}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleGenerateBackup}
+            disabled={loading || loadingFiles}
+            className="inline-flex items-center bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-4 py-2.5 rounded-lg shadow transition-all disabled:opacity-50 font-semibold"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {loading ? 'Compiling Schema...' : 'Generate Full System Backup (.sql)'}
+          </button>
+
+          <button
+            onClick={handleDownloadFilesBackup}
+            disabled={loading || loadingFiles}
+            className="inline-flex items-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-lg shadow transition-all disabled:opacity-50 font-semibold"
+          >
+            {loadingFiles ? (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2" />
+                Compiling ZIP...
+              </>
+            ) : (
+              <>
+                <HardDrive className="h-4 w-4 mr-2" />
+                Download Storage Files Backup (.zip)
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* 4. Forensic Audit Trail Lookup Section (Full Width at Bottom) */}

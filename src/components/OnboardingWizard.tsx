@@ -21,13 +21,24 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 }) => {
   const [isSetupFlow, setIsSetupFlow] = useState(isFirstTimeSetup);
   const [step, setStep] = useState(1);
+  const [lastStepChange, setLastStepChange] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const changeStep = (newStep: number | ((s: number) => number)) => {
+    if (typeof newStep === 'function') {
+      setStep(newStep);
+    } else {
+      setStep(newStep);
+    }
+    setLastStepChange(Date.now());
+  };
 
   React.useEffect(() => {
     if (isOpen) {
       setIsSetupFlow(isFirstTimeSetup);
       setStep(1);
+      setLastStepChange(Date.now());
     }
   }, [isOpen, isFirstTimeSetup]);
 
@@ -79,7 +90,13 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (step < 3) {
-      setStep((s) => s + 1);
+      changeStep((s) => s + 1);
+      return;
+    }
+
+    // Accidental double-click/rapid-click guard from Step 2
+    if (Date.now() - lastStepChange < 600) {
+      console.warn("Rapid click submission ignored.");
       return;
     }
 
@@ -95,7 +112,12 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         // 1. Password update
         if (isSupabaseConfigured && supabase) {
           const { error: pwdErr } = await supabase.auth.updateUser({ password: adminPassword });
-          if (pwdErr) throw pwdErr;
+          if (pwdErr) {
+            const isSamePasswordError = pwdErr.message?.toLowerCase().includes("different from the old");
+            if (!isSamePasswordError) {
+              throw pwdErr;
+            }
+          }
         } else {
           // Update password in mock users
           const users = localStorage.getItem('praxdoc_users') ? JSON.parse(localStorage.getItem('praxdoc_users')!) : [];
@@ -619,7 +641,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
               {step > 1 && (
                 <button
                   type="button"
-                  onClick={() => setStep((s) => s - 1)}
+                  onClick={() => changeStep((s) => s - 1)}
                   className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-850 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
                 >
                   Back
@@ -641,7 +663,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
               {step < 3 ? (
                 <button
                   type="button"
-                  onClick={() => setStep((s) => s + 1)}
+                  onClick={() => changeStep((s) => s + 1)}
                   className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 transition-colors"
                 >
                   Continue
