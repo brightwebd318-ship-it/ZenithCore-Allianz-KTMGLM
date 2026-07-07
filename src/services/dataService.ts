@@ -1377,6 +1377,7 @@ export const dataService = {
               };
               const token = await getAuthToken();
               const data = await addTodoTaskAction(token, dbPayload);
+              if (data && data.success === false) throw new Error(data.message);
               createdTask = mapTodoTaskFromDb(data);
             } catch (err) {
               console.warn("Error inserting task to Supabase, falling back to LocalStorage:", err);
@@ -1529,16 +1530,17 @@ export const dataService = {
     {
       dbPayload.next_session_notes = session.session_notes;
       try {
-              const token = await getAuthToken();
-              const data = await addScheduledSessionAction(token, dbPayload);
-              createdSession = {
-                ...data,
-                session_notes: data.next_session_notes || data.session_notes || ''
-              };
-            } catch (err) {
-              console.error("Error inserting scheduled session to Supabase:", err);
-              throw err;
-            }
+                const token = await getAuthToken();
+                const data = await addScheduledSessionAction(token, dbPayload);
+                if (data && data.success === false) throw new Error(data.message);
+                createdSession = {
+                  ...data,
+                  session_notes: data.next_session_notes || data.session_notes || ''
+                };
+              } catch (err: any) {
+                console.error("Error inserting scheduled session to Supabase:", err);
+                throw new Error(err.message || 'Unknown database error occurred while scheduling session');
+              }
       }
 
     if (createdSession.practitioner_id) {

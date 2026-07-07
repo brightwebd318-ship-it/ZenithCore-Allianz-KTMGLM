@@ -557,7 +557,7 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                           </span>
                         )}
                         
-                        {canAcceptSession(session) && (
+                        {session.status === 'scheduled' && canAcceptSession(session) && (
                           <button
                             onClick={() => handleDeleteSession(session.id)}
                             className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all self-center"

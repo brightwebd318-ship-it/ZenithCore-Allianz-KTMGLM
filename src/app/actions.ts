@@ -28,13 +28,13 @@ async function getTenantIdFromToken(supabase: any) {
     .single();
   if (profileErr) throw profileErr;
   if (!profile) throw new Error("No user profile found matching the active session");
-  
+
   return profile.tenant_id;
 }
 
 export async function getTenantAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  
+
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
   if (userErr || !user) throw new Error("No active auth session found");
 
@@ -81,7 +81,7 @@ export async function getCurrentUserAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const { data: { user }, error: userErr } = await supabase.auth.getUser();
   if (userErr || !user) return null;
-  
+
   const { data, error } = await supabase
     .from('users')
     .select('*')
@@ -140,7 +140,7 @@ export async function createStaffAuthAction(
   }
 
   const adminClient = createAdminSupabaseClient();
-  
+
   // 2. Register user into auth.users (using official Supabase Admin Auth API)
   const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
     email: userEmail,
@@ -150,7 +150,7 @@ export async function createStaffAuthAction(
   });
   if (authErr) throw authErr;
   if (!authData.user) throw new Error("Failed to create authentication credentials.");
-  
+
   const newUserId = authData.user.id;
 
   // 3. Link/Upsert to public profile
@@ -467,7 +467,7 @@ export async function addExpenseAction(accessToken: string, newExpensePayload: a
 export async function deleteExpenseAction(accessToken: string, expenseId: string) {
   const supabase = createServerSupabaseClient(accessToken);
   const tenantId = await getTenantIdFromToken(supabase);
-  
+
   const { data: expData, error: expErr } = await supabase
     .from('business_expenses')
     .select('bill_attachments')
@@ -554,8 +554,8 @@ export async function addTodoTaskAction(accessToken: string, dbPayload: any) {
     .insert([dbPayload])
     .select()
     .single();
-  if (error) throw error;
-  return data;
+  if (error) return { success: false, message: error.message, details: error };
+  return { success: true, ...data };
 }
 
 export async function updateTodoTaskStatusAction(accessToken: string, taskId: string, dbStatus: string) {
@@ -587,8 +587,8 @@ export async function addScheduledSessionAction(accessToken: string, dbPayload: 
     .insert([dbPayload])
     .select()
     .single();
-  if (error) throw error;
-  return data;
+  if (error) return { success: false, message: error.message, details: error };
+  return { success: true, ...data };
 }
 
 export async function updateScheduledSessionStatusAction(accessToken: string, sessionId: string, status: string) {
@@ -646,7 +646,7 @@ export async function clearSystemNotificationsAction(accessToken: string) {
 // 13. SPECIAL GATE: Verify and link tenant (for onboarding wizard)
 export async function verifyAndLinkTenantAction(accessToken: string, targetTenantId: string) {
   const supabase = createServerSupabaseClient(accessToken);
-  
+
   const { data: tenantData, error: tenantErr } = await supabase
     .from('tenants')
     .select('id, business_name')
@@ -774,7 +774,7 @@ export async function deleteStaffAction(accessToken: string, userId: string) {
   if (invErr) {
     console.warn("Failed to set associated_practitioner_id to null in invoices, proceeding:", invErr);
   }
-  
+
   // 2. Delete credentials from Supabase authentication
   let authDeleted = false;
   if (targetUser && targetUser.email) {
@@ -1037,7 +1037,7 @@ export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: strin
           }
         ]
       },
-      { text: 'Thanks for choosing ZenithCore Alliance', italics: true, color: '#94a3b8', fontSize: 10, alignment: 'center', margin: [0, 30, 0, 0] }
+      { text: 'Thank you for Trusting Zenith Core Alliance.', italics: true, color: '#94a3b8', fontSize: 10, alignment: 'center', margin: [0, 30, 0, 0] }
     ].filter(Boolean)
   };
 
@@ -1048,7 +1048,7 @@ export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: strin
     from: `"ZenithCore Billing" <${SMTP_EMAIL}>`,
     to: toEmail,
     subject: `Invoice Generated: ${invoiceDetails.invoiceNum}`,
-    text: `Hello ${invoiceDetails.patientName},\n\nPlease find your clinical receipt (${invoiceDetails.invoiceNum}) attached to this email as a PDF.\n\nThanks for choosing ZenithCore Alliance`,
+    text: `Hello ${invoiceDetails.patientName},\n\nPlease find your clinical receipt (${invoiceDetails.invoiceNum}) attached to this email as a PDF.\n\nThank you for Trusting Zenith Core Alliance.`,
     attachments: [
       {
         filename: `Invoice_${invoiceDetails.invoiceNum}.pdf`,

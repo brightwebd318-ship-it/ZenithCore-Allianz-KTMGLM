@@ -630,6 +630,12 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <style>{`
             @media print {
+              html, body {
+                height: 100vh !important;
+                overflow: hidden !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
               body * {
                 visibility: hidden !important;
               }
@@ -671,48 +677,6 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                   className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-brand-600 transition-all flex items-center space-x-1 shadow-sm"
                 >
                   <span>🖨️ Print / Save PDF</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const patient = patients.find(p => p.id === printableInvoice.patient_id);
-                    const pName = patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family}` : 'Patient';
-                    const practitioner = staff.find(s => s.id === printableInvoice.associated_practitioner_id)?.full_name || 'Practitioner';
-                    
-                    const receiptText = `
---------------------------------------------------
-ZENITH CORE ALLIANCE RECEIPT
---------------------------------------------------
-Invoice ID: ${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
-Date Generated: ${new Date(printableInvoice.created_at).toLocaleString('en-IN')}
-Patient Name: ${pName}
-Practitioner Name: ${practitioner}
---------------------------------------------------
-LINE ITEMS:
-${(printableInvoice.resource_fhir?.lineItem || []).map((item: any) => {
-  const quantity = item.quantity || 1;
-  const rate = item.priceComponent?.[0]?.amount?.value || 0;
-  const total = quantity * rate;
-  return `- ${item.description}: ${quantity} x ₹${rate} = ₹${total}`;
-}).join('\n')}
---------------------------------------------------
-Subtotal: ₹${printableInvoice.total_amount - printableInvoice.computed_tax_amount}
-CGST (9%): ₹${printableInvoice.cgst_rate > 0 ? printableInvoice.computed_tax_amount / 2 : 0}
-SGST (9%): ₹${printableInvoice.sgst_rate > 0 ? printableInvoice.computed_tax_amount / 2 : 0}
-Grand Total: ₹${printableInvoice.total_amount}
---------------------------------------------------
-Thank you for choosing ${localStorage.getItem('praxdoc_tenant_logo_name') || 'our clinic'}!
-`;
-                    const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `Invoice_${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}.txt`;
-                    link.click();
-                    handleUpdateStatus(printableInvoice.id, 'PAID');
-                  }}
-                  className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-emerald-700 transition-all flex items-center space-x-1 shadow-sm"
-                >
-                  <span>📥 Download Text Receipt</span>
                 </button>
                 <button
                   onClick={() => {

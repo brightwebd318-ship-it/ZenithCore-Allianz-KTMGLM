@@ -46,6 +46,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');
+  const [taskError, setTaskError] = useState('');
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [realtimeNotify, setRealtimeNotify] = useState<string | null>(null);
@@ -171,6 +172,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
     if (!taskTitle.trim() || !taskAssignee) return;
 
     setLoading(true);
+    setTaskError('');
     try {
       const creatorId = currentUser?.id || staff[0]?.id || '';
       await dataService.addTodoTask({
@@ -195,8 +197,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Created logistics task: ${taskTitle}`);
       triggerRefresh();
       loadTasksData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setTaskError(err.message || 'Failed to create task. You may lack sufficient permissions.');
     } finally {
       setLoading(false);
     }
@@ -444,6 +447,12 @@ export const TasksView: React.FC<TasksViewProps> = ({
             </div>
             
             <form onSubmit={handleCreateTask} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              {taskError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative text-xs">
+                  <strong className="font-bold">Error:</strong>
+                  <span className="block sm:inline ml-1">{taskError}</span>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Task Title</label>
                 <input

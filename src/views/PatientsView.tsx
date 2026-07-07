@@ -629,14 +629,20 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
 
 
             {/* Clinical Logging Timeline */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800">
+            <div className="rounded-xl border-2 border-brand-500 bg-white p-6 shadow-md dark:bg-[#111827] dark:border-brand-500">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Clinical Logs & Progress Timeline
+                  Clinical Notes
                 </h4>
-                <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
-                  <span>Total Sessions Completed:</span>
-                  <span className="font-extrabold font-mono text-xs">{patientSessions.filter(s => s.status === 'completed').length}</span>
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 border border-blue-200 dark:border-blue-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
+                    <span>Planned Sessions:</span>
+                    <span className="font-extrabold font-mono text-xs">{patientSessions.filter(s => s.status === 'scheduled').reduce((acc, s) => acc + Math.max(1, Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / (45 * 60 * 1000))), 0)}</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
+                    <span>Total Sessions Completed:</span>
+                    <span className="font-extrabold font-mono text-xs">{patientSessions.filter(s => s.status === 'completed').reduce((acc, s) => acc + Math.max(1, Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / (45 * 60 * 1000))), 0)}</span>
+                  </div>
                 </div>
               </div>
 
@@ -959,7 +965,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
       {/* Add Patient Modal overlay */}
       {showAddForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-xl dark:bg-slate-900 dark:border-slate-800 overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-4xl dark:bg-slate-900 dark:border-slate-800 overflow-hidden">
             <div className="bg-brand-500 text-white px-6 py-4 flex justify-between items-center">
               <h3 className="font-bold text-lg">Create New Patient Profile</h3>
               <button onClick={() => setShowAddForm(false)} className="text-white/80 hover:text-white text-sm font-bold">Close</button>
@@ -1146,6 +1152,12 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
           <style>{`
             @media print {
+              html, body {
+                height: 100vh !important;
+                overflow: hidden !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
               body * {
                 visibility: hidden !important;
               }
@@ -1186,49 +1198,6 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                   className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-brand-600 transition-all flex items-center space-x-1 shadow-sm"
                 >
                   <span>🖨️ Print / Save PDF</span>
-                </button>
-                <button
-                  onClick={() => {
-                    const patient = patients.find(p => p.id === printableInvoice.patient_id);
-                    const pName = patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family}` : 'Patient';
-                    const practitioner = staffList.find(s => s.id === printableInvoice.associated_practitioner_id)?.full_name || 'Practitioner';
-                    
-                    const receiptText = `
---------------------------------------------------
-ZENITH CORE CLINICAL RECEIPT
---------------------------------------------------
-Invoice ID: ${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}
-Date Generated: ${new Date(printableInvoice.created_at).toLocaleString('en-IN')}
-Patient Name: ${pName}
-Practitioner Name: ${practitioner}
---------------------------------------------------
-LINE ITEMS:
-${(printableInvoice.resource_fhir?.lineItem || []).map((item: any) => {
-  const quantity = item.quantity || 1;
-  const rate = item.priceComponent?.[0]?.amount?.value || 0;
-  const total = quantity * rate;
-  return `- ${item.description}: ${quantity} x ₹${rate} = ₹${total}`;
-}).join('\n')}
---------------------------------------------------
-Subtotal: ₹${printableInvoice.total_amount - printableInvoice.computed_tax_amount}
-CGST (9%): ₹${printableInvoice.cgst_rate > 0 ? printableInvoice.computed_tax_amount / 2 : 0}
-SGST (9%): ₹${printableInvoice.sgst_rate > 0 ? printableInvoice.computed_tax_amount / 2 : 0}
-Grand Total: ₹${printableInvoice.total_amount}
-Payment Status: ${String(printableInvoice.payment_status).toUpperCase()}
---------------------------------------------------
-Thank you for choosing PraxDoc Clinic!
-`;
-                    const blob = new Blob([receiptText], { type: 'text/plain;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `Invoice_${printableInvoice.resource_fhir?.identifier?.[0]?.value || printableInvoice.id}.txt`;
-                    link.click();
-                    handleUpdateStatus(printableInvoice.id, 'PAID');
-                  }}
-                  className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-emerald-700 transition-all flex items-center space-x-1 shadow-sm"
-                >
-                  <span>📥 Download Text Receipt</span>
                 </button>
                 <button
                   onClick={() => {

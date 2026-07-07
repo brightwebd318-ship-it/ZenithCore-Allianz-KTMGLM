@@ -127,22 +127,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         return true;
       }).length;
 
-      // Count my completed sessions and hours (Current month only)
-      const myCompletedSessions = appointments.filter((app) => {
-        if (app.practitioner_id !== currentUser?.id) return false;
-        if (app.status !== 'completed') return false;
-        if (!app.start_time) return false;
-        const appDate = new Date(app.start_time);
-        return appDate.getFullYear() === currentYear && appDate.getMonth() === currentMonth;
-      });
-      const myCompletedCount = myCompletedSessions.length;
-      const myCompletedHours = myCompletedSessions.reduce((sum, app) => {
-        if (!app.start_time || !app.end_time) return sum;
-        const durationMs = new Date(app.end_time).getTime() - new Date(app.start_time).getTime();
-        if (isNaN(durationMs) || durationMs <= 0) return sum;
-        const durationHours = durationMs / (1000 * 60 * 60);
-        return sum + durationHours;
-      }, 0);
+        // Count my completed sessions and hours (Current month only)
+        const myCompletedSessions = appointments.filter((app) => {
+          if (app.practitioner_id !== currentUser?.id) return false;
+          if (app.status !== 'completed') return false;
+          if (!app.start_time) return false;
+          const appDate = new Date(app.start_time);
+          return appDate.getFullYear() === currentYear && appDate.getMonth() === currentMonth;
+        });
+
+        const sessionDuration = tenant?.session_duration_minutes || 45;
+
+        const myCompletedCount = myCompletedSessions.reduce((sum, app) => {
+          if (!app.start_time || !app.end_time) return sum;
+          const durationMs = new Date(app.end_time).getTime() - new Date(app.start_time).getTime();
+          if (isNaN(durationMs) || durationMs <= 0) return sum + 1;
+          const count = Math.max(1, Math.round(durationMs / (sessionDuration * 60 * 1000)));
+          return sum + count;
+        }, 0);
+
+        const myCompletedHours = myCompletedSessions.reduce((sum, app) => {
+          if (!app.start_time || !app.end_time) return sum;
+          const durationMs = new Date(app.end_time).getTime() - new Date(app.start_time).getTime();
+          if (isNaN(durationMs) || durationMs <= 0) return sum;
+          const count = Math.max(1, Math.round(durationMs / (sessionDuration * 60 * 1000)));
+          return sum + (count * sessionDuration / 60);
+        }, 0);
 
       setStats({
         patientsCount: patients.length,
@@ -425,7 +435,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         {/* Staff Performance Card (Everyone Sees Their Own) */}
         <div className="rounded-xl border border-slate-200/80 bg-white p-6 dark:bg-[#111827] dark:border-slate-800 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
           <div>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">My Completed Log</span>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Monthly Completion</span>
             <div className="mt-2 space-y-1">
               <div className="text-sm font-bold text-slate-700 dark:text-slate-350">
                 Sessions: <span className="text-2xl font-extrabold text-slate-900 dark:text-white ml-1">{loading ? '...' : stats.myCompletedCount}</span>
