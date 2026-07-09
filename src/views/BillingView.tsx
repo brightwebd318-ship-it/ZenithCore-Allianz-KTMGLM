@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CreditCard, Eye, Plus, FileText, UserCheck, Calendar, Search } from 'lucide-react';
+import { CreditCard, Eye, Plus, FileText, UserCheck, Calendar, Search, Trash2 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { Invoice, Patient, User as StaffUser, InventoryItem } from '../services/dataService';
 import { sendInvoiceEmailAction } from '../app/actions';
@@ -18,8 +18,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   // Form States
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedStaffId, setSelectedStaffId] = useState('');
-  const [sessionsCount, setSessionsCount] = useState<number | ''>(1);
-  const [ratePerSession, setRatePerSession] = useState(1200);
+  const [sessionsCount, setSessionsCount] = useState<number | ''>('');
+  const [ratePerSession, setRatePerSession] = useState<number | ''>('');
 
   // Services Catalog list
   const [services, setServices] = useState<any[]>([]);
@@ -36,8 +36,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   // Custom manual entries state
   const [customItems, setCustomItems] = useState<Array<{ id: string; name: string; quantity: number; rate: number; inventoryId?: string }>>([]);
   const [newItemName, setNewItemName] = useState('');
-  const [newItemRate, setNewItemRate] = useState(0);
-  const [newItemQty, setNewItemQty] = useState(1);
+  const [newItemRate, setNewItemRate] = useState<number | ''>('');
+  const [newItemQty, setNewItemQty] = useState<number | ''>(1);
 
   // Inventory suggestions state
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -45,6 +45,14 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
   // Selected patient metadata (to show real-time GST status)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+
+  // Custom Invoice Date Recording
+  const [invoiceDateMode, setInvoiceDateMode] = useState<'today' | 'custom'>('today');
+  const [customInvoiceDate, setCustomInvoiceDate] = useState(() => {
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+  });
 
 
 
@@ -96,19 +104,21 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
   const handleAddCustomItem = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!newItemName.trim() || newItemRate <= 0 || newItemQty <= 0) return;
+    const rate = newItemRate === '' ? 0 : Number(newItemRate);
+    const qty = newItemQty === '' ? 0 : Number(newItemQty);
+    if (!newItemName.trim() || rate <= 0 || qty <= 0) return;
     setCustomItems(prev => [
       ...prev,
       {
         id: Math.random().toString(36).substring(2, 9),
         name: newItemName.trim(),
-        rate: newItemRate,
-        quantity: newItemQty,
+        rate: rate,
+        quantity: qty,
         inventoryId: selectedInventoryId !== 'custom' ? selectedInventoryId : undefined
       }
     ]);
     setNewItemName('');
-    setNewItemRate(0);
+    setNewItemRate('');
     setNewItemQty(1);
     setSelectedInventoryId('custom');
   };
@@ -122,8 +132,9 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
     if (!selectedPatientId || !selectedStaffId) return;
 
     try {
-      const actualSessionsCount = sessionsCount === '' ? 0 : sessionsCount;
-      const sessionsCost = actualSessionsCount * ratePerSession;
+      const actualSessionsCount = sessionsCount === '' ? 0 : Number(sessionsCount);
+      const actualRatePerSession = ratePerSession === '' ? 0 : Number(ratePerSession);
+      const sessionsCost = actualSessionsCount * actualRatePerSession;
       const customCost = customItems.reduce((sum, item) => sum + item.quantity * item.rate, 0);
       const baseAmount = sessionsCost + customCost;
       const applyGst = selectedPatient ? selectedPatient.gst_enabled : false;
@@ -142,6 +153,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       const selectedService = services.find(s => s.id === selectedServiceId);
       const sessionDescription = selectedService ? selectedService.name : 'Therapy Session Units';
 
+      const invoiceDate = invoiceDateMode === 'today' ? new Date().toISOString() : new Date(customInvoiceDate).toISOString();
+
       const newInv = await dataService.addInvoice(
         selectedPatientId,
         actualSessionsCount,
@@ -149,12 +162,14 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
         applyGst,
         baseAmount,
         customItems.map(item => ({ name: item.name, quantity: item.quantity, rate: item.rate })),
-        sessionDescription
+        sessionDescription,
+        invoiceDate
       );
 
       // Reset
       setCustomItems([]);
-      setSessionsCount(1);
+      setSessionsCount('');
+      setRatePerSession('');
       setSelectedServiceId('custom');
       await dataService.addAuditTrail('FINANCIAL_MUTATION', `Generated new invoice ledger trace for patient ID: ${selectedPatientId}`);
       
@@ -223,11 +238,25 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
     }
   };
 
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (!window.confirm("Are you sure you want to permanently delete this invoice? This will also remove the transaction entry from database.")) {
+      return;
+    }
+    try {
+      await dataService.deleteInvoice(invoiceId);
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Permanently deleted invoice ID: ${invoiceId}`);
+      triggerRefresh();
+    } catch (err: any) {
+      alert("Failed to delete invoice: " + err.message);
+    }
+  };
+
 
 
   // Live Calculations for Preview card
-  const actualSessionsCount = sessionsCount === '' ? 0 : sessionsCount;
-  const sessionsCost = actualSessionsCount * ratePerSession;
+  const actualSessionsCount = sessionsCount === '' ? 0 : Number(sessionsCount);
+  const actualRatePerSession = ratePerSession === '' ? 0 : Number(ratePerSession);
+  const sessionsCost = actualSessionsCount * actualRatePerSession;
   const customCost = customItems.reduce((sum, item) => sum + item.quantity * item.rate, 0);
   const basePreviewAmount = sessionsCost + customCost;
   const isGstActive = selectedPatient ? selectedPatient.gst_enabled : false;
@@ -281,6 +310,45 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                 </select>
               </div>
 
+              {/* Invoice Date Field */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Invoice Date</label>
+                <div className="flex items-center space-x-2">
+                  <div className="flex-1">
+                    {invoiceDateMode === 'today' ? (
+                      <div className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800/40 dark:border-slate-800 text-slate-500 italic flex items-center justify-between">
+                        <span>Current Time (Live)</span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded uppercase dark:bg-emerald-950/40 dark:text-emerald-400">Today</span>
+                      </div>
+                    ) : (
+                      <input
+                        type="datetime-local"
+                        value={customInvoiceDate}
+                        onChange={(e) => setCustomInvoiceDate(e.target.value)}
+                        className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (invoiceDateMode === 'today') {
+                        setInvoiceDateMode('custom');
+                      } else {
+                        setInvoiceDateMode('today');
+                      }
+                    }}
+                    className={`px-3 py-2 rounded text-xs font-bold border transition-colors shadow-sm cursor-pointer ${
+                      invoiceDateMode === 'today'
+                        ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-750'
+                        : 'bg-brand-500 border-brand-500 text-white hover:bg-brand-600'
+                    }`}
+                  >
+                    {invoiceDateMode === 'today' ? 'Choose Date' : 'Set to Today'}
+                  </button>
+                </div>
+              </div>
+
               {/* Service Dropdown */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Service</label>
@@ -290,11 +358,13 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                     const val = e.target.value;
                     setSelectedServiceId(val);
                     if (val === 'custom') {
-                      // Keep custom rate or set a baseline
+                      setSessionsCount('');
+                      setRatePerSession('');
                     } else {
                       const srv = services.find(s => s.id === val);
                       if (srv) {
                         setRatePerSession(srv.price);
+                        setSessionsCount(1);
                       }
                     }
                   }}
@@ -334,7 +404,14 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                     type="number"
                     min={0}
                     value={ratePerSession}
-                    onChange={(e) => setRatePerSession(parseInt(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setRatePerSession('');
+                      } else {
+                        setRatePerSession(parseInt(val) || 0);
+                      }
+                    }}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                   />
                 </div>
@@ -389,7 +466,14 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                       type="number"
                       min={0}
                       value={newItemRate}
-                      onChange={(e) => setNewItemRate(parseInt(e.target.value) || 0)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setNewItemRate('');
+                        } else {
+                          setNewItemRate(parseInt(val) || 0);
+                        }
+                      }}
                       className="w-full rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                     />
                   </div>
@@ -399,7 +483,14 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                       type="number"
                       min={1}
                       value={newItemQty}
-                      onChange={(e) => setNewItemQty(parseInt(e.target.value) || 1)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setNewItemQty('');
+                        } else {
+                          setNewItemQty(parseInt(val) || 1);
+                        }
+                      }}
                       className="w-full rounded border border-slate-200 px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
                     />
                   </div>
@@ -614,6 +705,13 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                           title="View raw JSON"
                         >
                           <FileText className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteInvoice(invoice.id)}
+                          className="inline-flex items-center p-1 rounded border border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50 dark:border-red-950/40 dark:hover:bg-red-950/20"
+                          title="Delete invoice"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </td>
                     </tr>

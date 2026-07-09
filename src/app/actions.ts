@@ -419,6 +419,18 @@ export async function updateInvoicePaymentStatusAction(accessToken: string, invo
   return data;
 }
 
+export async function deleteInvoiceAction(accessToken: string, invoiceId: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { error } = await supabase
+    .from('invoices')
+    .delete()
+    .eq('id', invoiceId)
+    .eq('tenant_id', tenantId);
+  if (error) throw error;
+  return true;
+}
+
 // 7. INVENTORY
 export async function getInventoryAction(accessToken: string) {
   const supabase = createServerSupabaseClient(accessToken);

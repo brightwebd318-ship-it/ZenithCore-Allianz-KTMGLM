@@ -25,6 +25,7 @@ import {
   getInvoicesAction,
   addInvoiceAction,
   updateInvoicePaymentStatusAction,
+  deleteInvoiceAction,
   getInventoryAction,
   deleteInventoryItemAction,
   addInventoryItemAction,
@@ -1009,7 +1010,8 @@ export const dataService = {
     applyGst: boolean,
     baseAmount: number,
     customItems?: Array<{ name: string; quantity: number; rate: number }>,
-    sessionDescription?: string
+    sessionDescription?: string,
+    createdAt?: string
   ): Promise<Invoice> => {
     const tenant = await dataService.getTenant();
     
@@ -1054,7 +1056,7 @@ export const dataService = {
       computed_tax_amount,
       total_amount,
       payment_status: 'pending',
-      created_at: new Date().toISOString(),
+      created_at: createdAt || new Date().toISOString(),
       resource_fhir: {
         resourceType: 'Invoice',
         status: 'issued',
@@ -1112,7 +1114,12 @@ export const dataService = {
     {
       const token = await getAuthToken();
       return updateInvoicePaymentStatusAction(token, invoiceId, status.toLowerCase());
-      }
+    }
+  },
+
+  deleteInvoice: async (invoiceId: string): Promise<boolean> => {
+    const token = await getAuthToken();
+    return deleteInvoiceAction(token, invoiceId);
   },
 
   // INVENTORY
