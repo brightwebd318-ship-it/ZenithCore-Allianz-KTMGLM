@@ -350,6 +350,18 @@ export async function getClinicalLogsAction(accessToken: string, patientId: stri
   return data;
 }
 
+export async function getAllClinicalLogsAction(accessToken: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase
+    .from('clinical_logs')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('is_deleted', false);
+  if (error) throw error;
+  return data;
+}
+
 export async function addClinicalLogAction(accessToken: string, newLogPayload: any) {
   const supabase = createServerSupabaseClient(accessToken);
   const { data, error } = await supabase
@@ -1095,4 +1107,16 @@ export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: strin
 
   await transporter.sendMail(mailOptions);
   return { success: true };
+}
+
+export async function updateClinicalLogAction(accessToken: string, logId: string, updates: any) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { data, error } = await supabase
+    .from('clinical_logs')
+    .update(updates)
+    .eq('id', logId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }

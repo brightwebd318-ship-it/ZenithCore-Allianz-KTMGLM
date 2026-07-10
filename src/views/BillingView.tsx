@@ -102,6 +102,33 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
     }
   }, [selectedPatientId, patients]);
 
+  const handleAddServiceItem = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const actualQty = sessionsCount === '' ? 0 : Number(sessionsCount);
+    const actualRate = ratePerSession === '' ? 0 : Number(ratePerSession);
+    if (actualQty <= 0 || actualRate <= 0) {
+      alert("Please enter a valid Session Count and Rate Per Session before adding.");
+      return;
+    }
+    const selectedService = services.find(s => s.id === selectedServiceId);
+    const serviceName = selectedService ? selectedService.name : 'Therapy Session Unit';
+    
+    setCustomItems(prev => [
+      ...prev,
+      {
+        id: Math.random().toString(36).substring(2, 9),
+        name: serviceName,
+        rate: actualRate,
+        quantity: actualQty
+      }
+    ]);
+    
+    // Clear/reset service fields
+    setSelectedServiceId('custom');
+    setSessionsCount('');
+    setRatePerSession('');
+  };
+
   const handleAddCustomItem = (e: React.MouseEvent) => {
     e.preventDefault();
     const rate = newItemRate === '' ? 0 : Number(newItemRate);
@@ -139,6 +166,17 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       const baseAmount = sessionsCost + customCost;
       const applyGst = selectedPatient ? selectedPatient.gst_enabled : false;
 
+      // Calculate total sessions (including itemized entries that represent therapy sessions)
+      const serviceNames = services.map(s => s.name.toLowerCase());
+      const customSessionsCount = customItems
+        .filter(item => {
+          const itemNameLower = item.name.toLowerCase();
+          return serviceNames.includes(itemNameLower) || itemNameLower.includes('session');
+        })
+        .reduce((sum, item) => sum + item.quantity, 0);
+
+      const totalSessionsCount = actualSessionsCount + customSessionsCount;
+
       // Deduct inventory count for items that came from catalog
       for (const item of customItems) {
         if (item.inventoryId) {
@@ -157,7 +195,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
       const newInv = await dataService.addInvoice(
         selectedPatientId,
-        actualSessionsCount,
+        totalSessionsCount,
         selectedStaffId,
         applyGst,
         baseAmount,
@@ -349,39 +387,38 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                 </div>
               </div>
 
-              {/* Service Dropdown */}
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Service</label>
-                <select
-                  value={selectedServiceId}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedServiceId(val);
-                    if (val === 'custom') {
-                      setSessionsCount('');
-                      setRatePerSession('');
-                    } else {
-                      const srv = services.find(s => s.id === val);
-                      if (srv) {
-                        setRatePerSession(srv.price);
-                        setSessionsCount(1);
+              {/* Service Selection with Add Button */}
+              <div className="grid grid-cols-12 gap-2 items-end">
+                <div className="col-span-5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Service</label>
+                  <select
+                    value={selectedServiceId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedServiceId(val);
+                      if (val === 'custom') {
+                        setSessionsCount('');
+                        setRatePerSession('');
+                      } else {
+                        const srv = services.find(s => s.id === val);
+                        if (srv) {
+                          setRatePerSession(srv.price);
+                          setSessionsCount(1);
+                        }
                       }
-                    }
-                  }}
-                  className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                >
-                  <option value="custom">-- Custom Session / Rate --</option>
-                  {services.map((srv) => (
-                    <option key={srv.id} value={srv.id}>
-                      {srv.name} (₹{srv.price})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Session Count</label>
+                    }}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none"
+                  >
+                    <option value="custom">-- Custom Session / Rate --</option>
+                    {services.map((srv) => (
+                      <option key={srv.id} value={srv.id}>
+                        {srv.name} (₹{srv.price})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sessions</label>
                   <input
                     type="number"
                     min={0}
@@ -395,11 +432,11 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                         setSessionsCount(parseInt(val) || 0);
                       }
                     }}
-                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rate Per Session (₹)</label>
+                <div className="col-span-3">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rate (₹)</label>
                   <input
                     type="number"
                     min={0}
@@ -412,8 +449,18 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                         setRatePerSession(parseInt(val) || 0);
                       }
                     }}
-                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none"
                   />
+                </div>
+                <div className="col-span-1">
+                  <button
+                    type="button"
+                    onClick={handleAddServiceItem}
+                    className="bg-brand-500 text-white p-2 rounded hover:bg-brand-600 shadow w-full flex items-center justify-center h-[38px] transition-colors cursor-pointer"
+                    title="Add service to invoice list"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 
