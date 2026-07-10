@@ -158,7 +158,7 @@ export async function createStaffAuthAction(
   // 2. Register user into auth.users (using official Supabase Admin Auth API)
   const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
     email: userEmail,
-    password: password || 'ZenithMockPassword123!',
+    password: password || 'MyClinicMockPassword123!',
     email_confirm: true,
     user_metadata: { full_name: fullName || userEmail.split('@')[0] }
   });
@@ -975,7 +975,7 @@ export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: strin
           {
             width: '*',
             stack: [
-              ...(logoDataUri ? [{ image: logoDataUri, width: 140, margin: [0, 0, 0, 5] }] : [{ text: 'ZenithCore Alliance', fontSize: 20, bold: true, color: '#0f172a' }]),
+              ...(logoDataUri ? [{ image: logoDataUri, width: 140, margin: [0, 0, 0, 5] }] : [{ text: 'MyClinic', fontSize: 20, bold: true, color: '#0f172a' }]),
               { text: 'Mobile: +91 8289900665', fontSize: 8, color: '#64748b', bold: true, margin: [0, 2, 0, 0] }
             ]
           },
@@ -1084,7 +1084,7 @@ export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: strin
           }
         ]
       },
-      { text: 'Thank you for Trusting Zenith Core Alliance.', italics: true, color: '#94a3b8', fontSize: 10, alignment: 'center', margin: [0, 30, 0, 0] }
+      { text: 'Thank you for Trusting MyClinic.', italics: true, color: '#94a3b8', fontSize: 10, alignment: 'center', margin: [0, 30, 0, 0] }
     ].filter(Boolean)
   };
 
@@ -1092,10 +1092,10 @@ export async function sendInvoiceEmailAction(invoiceDetails: any, toEmail: strin
   const pdfBuffer: Buffer = await pdfDoc.getBuffer();
 
   const mailOptions = {
-    from: `"ZenithCore Billing" <${SMTP_EMAIL}>`,
+    from: `"MyClinic Billing" <${SMTP_EMAIL}>`,
     to: toEmail,
     subject: `Invoice Generated: ${invoiceDetails.invoiceNum}`,
-    text: `Hello ${invoiceDetails.patientName},\n\nPlease find your clinical receipt (${invoiceDetails.invoiceNum}) attached to this email as a PDF.\n\nThank you for Trusting Zenith Core Alliance.`,
+    text: `Hello ${invoiceDetails.patientName},\n\nPlease find your clinical receipt (${invoiceDetails.invoiceNum}) attached to this email as a PDF.\n\nThank you for Trusting MyClinic.`,
     attachments: [
       {
         filename: `Invoice_${invoiceDetails.invoiceNum}.pdf`,

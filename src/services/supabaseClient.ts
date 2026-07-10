@@ -15,6 +15,6 @@ if (!isSupabaseConfigured) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
-    storageKey: 'zenith-auth-token',
+    storageKey: 'myclinic-auth-token',
   }
 });

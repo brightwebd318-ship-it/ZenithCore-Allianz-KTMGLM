@@ -355,7 +355,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
               onClick={() => {
                 const max = tenantInfo?.max_user_logins || 5;
                 if (staffList.length >= max) {
-                  alert(`Maximum user limit reached (${max}). Please contact Zenith Core Alliance support to upgrade your plan.`);
+                  alert(`Maximum user limit reached (${max}). Please contact MyClinic support to upgrade your plan.`);
                   return;
                 }
                 setShowAddForm(true);

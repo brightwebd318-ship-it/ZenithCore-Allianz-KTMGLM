@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Zenith Core Alliance - Medical Portal",
+  title: "MyClinic - Medical Portal",
   description: "Secure, compliant medical dashboard for clinics and hospitals featuring patient management, doctor schedule allocations, automated billing, and detailed audit logs.",
-  keywords: ["Medical Dashboard", "Healthcare Dashboard", "ABHA Verification", "DPDP Consent Management", "GST Billing", "Zenith Core Alliance"],
-  authors: [{ name: "Zenith Core Alliance" }],
+  keywords: ["Medical Dashboard", "Healthcare Dashboard", "ABHA Verification", "DPDP Consent Management", "GST Billing", "MyClinic"],
+  authors: [{ name: "MyClinic" }],
   icons: {
-    icon: '/zenithtab.png',
+    icon: '/logo.png',
   },
 };
 

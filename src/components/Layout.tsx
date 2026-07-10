@@ -248,18 +248,18 @@ export const Layout: React.FC<LayoutProps> = ({
       }`}>
         <div>
           {/* Logo Brand Header */}
-          <div className="h-16 flex items-center px-2 border-b border-slate-150 dark:border-slate-800 bg-slate-50/55 dark:bg-[#111827] justify-center overflow-hidden relative">
+          <div className="py-4 flex items-center px-2 border-b border-slate-150 dark:border-slate-800 bg-slate-50/55 dark:bg-[#111827] justify-center overflow-hidden relative">
             <button
               onClick={() => {
                 setActiveTab('Dashboard');
                 setMobileMenuOpen(false);
               }}
-              className="h-full w-full outline-none focus:outline-none"
+              className="outline-none focus:outline-none flex justify-center w-full"
             >
               <img 
                 src="/logo.png" 
                 alt="PraxDoc Logo" 
-                className="h-full w-full object-contain p-1.5 cursor-pointer"
+                className="h-36 w-auto object-contain cursor-pointer"
               />
             </button>
             <button
@@ -297,18 +297,7 @@ export const Layout: React.FC<LayoutProps> = ({
           </nav>
         </div>
 
-        {/* Lower Left Actions */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-4 bg-slate-50/30 dark:bg-[#111827]/50">
 
-          {/* Brand Logo Banner */}
-          <div className="flex items-center justify-center py-2">
-            <img 
-              src="/praxdoc_logo.png" 
-              alt="PraxDoc Logo" 
-              className="h-36 w-auto object-contain"
-            />
-          </div>
-        </div>
       </aside>
 
       {/* Main Content Area */}

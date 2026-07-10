@@ -929,7 +929,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                     <span>Thankalam road, Muniyara</span>
                     <span>Nellikuzhy P O, Kothamangalam, 686691</span>
                     <span>Mobile +91 8289900665</span>
-                    <span>zenithcorealliance@gmail.com</span>
+                    <span>support@myclinic.com</span>
                   </div>
                   
                   <div className="space-y-1.5 text-xs font-mono">
