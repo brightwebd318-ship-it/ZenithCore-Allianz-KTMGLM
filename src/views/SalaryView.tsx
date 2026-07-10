@@ -8,7 +8,8 @@ import {
   CheckCircle,
   TrendingUp,
   User,
-  ShieldAlert
+  ShieldAlert,
+  Hourglass
 } from 'lucide-react';
 import { dataService, formatHours } from '../services/dataService';
 import type { User as StaffUser, Tenant, BusinessExpense } from '../services/dataService';
@@ -28,8 +29,11 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
   // Month input ref for native picker trigger
   const monthInputRef = useRef<HTMLInputElement>(null);
 
-  // Month select state (YYYY-MM format, defaulting to June 2026 based on workspace time context)
-  const [targetMonth, setTargetMonth] = useState('2026-06');
+  // Month select state (YYYY-MM format, defaulting to current calendar month)
+  const [targetMonth, setTargetMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
 
   // Hour Threshold Settings State
   const [thresholdInput, setThresholdInput] = useState(100);
@@ -133,7 +137,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
   // Record salary payment into expenses
   const handleRecordPayment = async (member: StaffUser, amount: number) => {
     if (!canManageStaff) return;
-    
+
     const formattedAmount = amount.toLocaleString('en-IN');
     const confirmPay = window.confirm(`Confirm recording salary payout of ₹${formattedAmount} to ${member.full_name} for ${targetMonth}?`);
     if (!confirmPay) return;
@@ -181,7 +185,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
       totalBaseSalary += details.base_salary;
       totalClinicalHours += details.clinical_hours;
       totalSessions += details.sessions_conducted;
-      
+
       // Calculate bonus based on global toggle and individual flag
       const bonusForMember = (globalBonusMode && member.bonus_system_enabled) ? details.computed_bonus : 0;
       totalBonusValue += bonusForMember;
@@ -189,9 +193,15 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
     }
   });
 
+  const paidSalariesSum = expenses
+    .filter((exp) => exp.category === 'Salaries' && exp.expense_name?.includes(`(${targetMonth})`))
+    .reduce((sum, exp) => sum + exp.amount, 0);
+
+  const toBePaid = Math.max(0, totalPayoutValue - paidSalariesSum);
+
   return (
     <div className="space-y-6">
-      
+
       {/* 1. View Header with Month & Global Toggle */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4 md:space-y-0">
         <div className="flex items-center space-x-3">
@@ -200,17 +210,17 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white font-outfit">
-              Staff Salary Ledger
+              Salary Calculator
             </h2>
             <p className="text-xs text-slate-405 dark:text-slate-400">
-              Calculate base pay, therapist clinical time bonuses, and track overall monthly outlays.
+              Calculate base pay and track overall monthly bonus.
             </p>
           </div>
         </div>
 
         {/* Filters and Toggle */}
         <div className="flex flex-wrap items-center gap-4">
-          
+
           {/* Hours Limit Threshold config (Admins only) */}
           {canManageStaff && (
             <form onSubmit={handleSaveThreshold} className="flex items-center space-x-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-lg">
@@ -235,7 +245,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
           )}
 
           {/* Target Month Input */}
-          <div 
+          <div
             className="flex items-center space-x-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 px-3 py-1.5 cursor-pointer"
             onClick={() => {
               try {
@@ -270,15 +280,13 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                   `Switched global session bonus mode to ${!globalBonusMode}`
                 ).catch(err => console.error(err));
               }}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                globalBonusMode ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-              }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${globalBonusMode ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                }`}
               id="bonus-mode-toggle"
             >
               <span
-                className={`${
-                  globalBonusMode ? 'translate-x-6' : 'translate-x-1'
-                } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                className={`${globalBonusMode ? 'translate-x-6' : 'translate-x-1'
+                  } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
               />
             </button>
             <span className={`text-[10px] font-bold ${globalBonusMode ? 'text-emerald-500' : 'text-slate-400'}`}>
@@ -289,7 +297,7 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
       </div>
 
       {/* 2. KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Payroll Cost */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm dark:bg-[#111827] dark:border-slate-800">
           <div className="flex items-center justify-between">
@@ -302,6 +310,22 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
             </h3>
             <p className="text-[10px] text-slate-400 mt-1">
               For {new Date(targetMonth + '-02').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+        </div>
+
+        {/* To Be Paid */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm dark:bg-[#111827] dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-450 uppercase dark:text-slate-400">To Be Paid</span>
+            <Hourglass className="h-5 w-5 text-rose-500" />
+          </div>
+          <div className="mt-2.5">
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white font-outfit">
+              ₹{toBePaid.toLocaleString('en-IN')}
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {paidSalariesSum > 0 ? `₹${paidSalariesSum.toLocaleString('en-IN')} marked as paid` : 'No payments recorded yet'}
             </p>
           </div>
         </div>
@@ -460,11 +484,9 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                       <td className="px-5 py-4 text-center">
                         <button
                           onClick={() => handleToggleBonusSystem(member.id, isEligible)}
-                          className={`relative inline-flex h-4.5 w-9 items-center rounded-full transition-colors focus:outline-none ${
-                            !canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
-                          } ${
-                            isEligible ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'
-                          }`}
+                          className={`relative inline-flex h-4.5 w-9 items-center rounded-full transition-colors focus:outline-none ${!canManageStaff ? 'opacity-50 cursor-not-allowed' : ''
+                            } ${isEligible ? 'bg-amber-500' : 'bg-slate-200 dark:bg-slate-700'
+                            }`}
                           disabled={!canManageStaff}
                           title={isEligible ? 'Bonus System Enabled' : 'Bonus System Disabled'}
                         >
@@ -482,9 +504,8 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                       </td>
 
                       {/* Total Payout */}
-                      <td className={`px-5 py-4 text-right font-mono font-extrabold bg-slate-50/20 dark:bg-slate-800/10 text-sm ${
-                        matchedExpense ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-slate-900 dark:text-white'
-                      }`}>
+                      <td className={`px-5 py-4 text-right font-mono font-extrabold bg-slate-50/20 dark:bg-slate-800/10 text-sm ${matchedExpense ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-slate-900 dark:text-white'
+                        }`}>
                         ₹{finalPayout.toLocaleString('en-IN')}
                       </td>
 
@@ -499,11 +520,10 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
                           <button
                             onClick={() => handleRecordPayment(member, finalPayout)}
                             disabled={!canManageStaff}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold text-white shadow transition-all ${
-                              canManageStaff
-                                ? 'bg-brand-500 hover:bg-brand-600 shadow-brand-500/10'
-                                : 'bg-slate-350 dark:bg-slate-700 cursor-not-allowed opacity-50 shadow-none'
-                            }`}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold text-white shadow transition-all ${canManageStaff
+                              ? 'bg-brand-500 hover:bg-brand-600 shadow-brand-500/10'
+                              : 'bg-slate-350 dark:bg-slate-700 cursor-not-allowed opacity-50 shadow-none'
+                              }`}
                           >
                             Pay Salary
                           </button>
@@ -517,16 +537,16 @@ export const SalaryView: React.FC<SalaryViewProps> = ({ triggerRefresh, triggerR
           </table>
         </div>
       </div>
-      
+
       {/* 4. Footnote Policy Info */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 dark:bg-slate-900/30 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-start space-x-2.5">
         <span className="text-base">💡</span>
         <div className="leading-relaxed">
           <p className="font-bold text-slate-700 dark:text-slate-300 mb-0.5">Clinic Payroll & Session Bonus Policy</p>
           <p>
-            Therapists earn an hourly bonus based on clinical time worked above a threshold of <strong>{tenant?.bonus_threshold_hours || 100} hours</strong>. 
-            The hourly rate is computed as <strong>1% of their base monthly salary</strong> (e.g. ₹600/hr for ₹60,000 base pay). 
-            Only appointments marked as <strong>Completed/Done</strong> status contribute to clinical time calculations. 
+            Therapists earn an hourly bonus based on clinical time worked above a threshold of <strong>{tenant?.bonus_threshold_hours || 100} hours</strong>.
+            The hourly rate is computed as <strong>1% of their base monthly salary</strong> (e.g. ₹600/hr for ₹60,000 base pay).
+            Only appointments marked as <strong>Completed/Done</strong> status contribute to clinical time calculations.
             Admins can toggle the global "Bonus Mode Toggle" to enable/disable bonus additions, and can record salary payments directly into the clinic's expenses log.
           </p>
         </div>

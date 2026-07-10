@@ -9,7 +9,12 @@ import {
   Trash2,
   AlertTriangle,
   HardDrive,
-  Plus
+  Plus,
+  FolderOpen,
+  Printer,
+  Upload,
+  FileText,
+  Eye
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { SystemAuditTrail, User as StaffUser, Tenant } from '../services/dataService';
@@ -47,6 +52,72 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
   const [newServiceName, setNewServiceName] = useState('');
   const [newServicePrice, setNewServicePrice] = useState(1200);
 
+  // Document Vault & Printables States
+  const [printablesList, setPrintablesList] = useState<any[]>([]);
+  const [vaultList, setVaultList] = useState<any[]>([]);
+  const [loadingPrintables, setLoadingPrintables] = useState(false);
+  const [loadingVault, setLoadingVault] = useState(false);
+
+  const handleUploadFile = async (folder: 'printables' | 'vault', file: File) => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const filePath = `${folder}/${file.name}`;
+        const { error } = await supabase.storage.from('PraxDocu').upload(filePath, file, {
+          upsert: true
+        });
+        if (error) throw error;
+        alert(`Successfully uploaded ${file.name} to ${folder === 'printables' ? 'Printables' : 'Document Vault'}!`);
+      } else {
+        alert(`Offline Mode: Simulating upload of ${file.name} to ${folder === 'printables' ? 'Printables' : 'Document Vault'}.`);
+      }
+      
+      await loadAdminData();
+      triggerRefresh();
+    } catch (err: any) {
+      alert("Failed to upload: " + err.message);
+    }
+  };
+
+  const handleDeleteFile = async (folder: 'printables' | 'vault', fileName: string) => {
+    if (!confirm(`Are you sure you want to delete ${fileName} from the ${folder}?`)) return;
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.storage.from('PraxDocu').remove([`${folder}/${fileName}`]);
+        if (error) throw error;
+      }
+      alert(`Deleted ${fileName} successfully.`);
+      await loadAdminData();
+      triggerRefresh();
+    } catch (err: any) {
+      alert("Failed to delete: " + err.message);
+    }
+  };
+
+  const handleViewFile = async (folder: 'printables' | 'vault', fileName: string) => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase.storage
+          .from('PraxDocu')
+          .createSignedUrl(`${folder}/${fileName}`, 300);
+        
+        if (error) throw error;
+        if (data?.signedUrl) {
+          window.open(data.signedUrl, '_blank');
+        } else {
+          throw new Error("Could not generate access URL");
+        }
+      } else {
+        alert(`Offline Mode: Simulating secure view for ${fileName}.`);
+      }
+    } catch (err: any) {
+      alert("Failed to view file: " + err.message);
+    }
+  };
+
+  const handlePrintFile = async (folder: 'printables' | 'vault', fileName: string) => {
+    await handleViewFile(folder, fileName);
+  };
+
   const loadServices = async () => {
     try {
       const srvs = await dataService.getServices();
@@ -66,7 +137,62 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
       setAuditTrails(trails);
 
       const metrics = await dataService.getTenantResourceMetrics();
-      setQuota(metrics);
+      
+      // Load printables
+      let printableBytes = 0;
+      let pList: any[] = [];
+      setLoadingPrintables(true);
+      try {
+        if (isSupabaseConfigured && supabase) {
+          const { data, error } = await supabase.storage.from('PraxDocu').list('printables', { limit: 100 });
+          if (error) throw error;
+          pList = data || [];
+        } else {
+          pList = [
+            { name: 'Invoice_Template.pdf', created_at: new Date().toISOString(), metadata: { size: 124500 } },
+            { name: 'Patient_Consent_Form.pdf', created_at: new Date().toISOString(), metadata: { size: 94000 } }
+          ];
+        }
+        setPrintablesList(pList);
+        printableBytes = pList.reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
+      } catch (pErr) {
+        console.error("Failed to load printables:", pErr);
+      } finally {
+        setLoadingPrintables(false);
+      }
+
+      // Load vault
+      let vaultBytes = 0;
+      let vList: any[] = [];
+      setLoadingVault(true);
+      try {
+        if (isSupabaseConfigured && supabase) {
+          const { data, error } = await supabase.storage.from('PraxDocu').list('vault', { limit: 100 });
+          if (error) throw error;
+          vList = data || [];
+        } else {
+          vList = [
+            { name: 'Medical_Report_XRay.jpg', created_at: new Date().toISOString(), metadata: { size: 2450000 } },
+            { name: 'Lab_Results_Bloodtest.pdf', created_at: new Date().toISOString(), metadata: { size: 450000 } }
+          ];
+        }
+        setVaultList(vList);
+        vaultBytes = vList.reduce((sum, f) => sum + (f.metadata?.size || 0), 0);
+      } catch (vErr) {
+        console.error("Failed to load vault:", vErr);
+      } finally {
+        setLoadingVault(false);
+      }
+
+      // Calculate aggregated file storage size in MB
+      const extraBytes = printableBytes + vaultBytes;
+      const extraMb = extraBytes / (1024 * 1024);
+      
+      const updatedQuota = {
+        ...metrics,
+        used_file_storage_mb: parseFloat((metrics.used_file_storage_mb + extraMb).toFixed(3))
+      };
+      setQuota(updatedQuota);
 
       const tenant = await dataService.getTenant();
       setTenantSettings(tenant);
@@ -523,6 +649,180 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Administrative Vault & Printables Folders */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-2">
+        
+        {/* Folder: Printables */}
+        <div className="flex flex-col">
+          {/* Folder Tab Shape */}
+          <div className="self-start px-4 py-2 bg-blue-600 dark:bg-blue-800 text-white rounded-t-lg font-black text-xs uppercase tracking-wider flex items-center space-x-1.5 shadow-sm border border-b-0 border-blue-600 dark:border-blue-800">
+            <FolderOpen className="h-4 w-4" />
+            <span>Printables</span>
+          </div>
+          {/* Folder Body */}
+          <div className="bg-white rounded-r-xl rounded-bl-xl border border-slate-200 p-5 shadow-sm dark:bg-[#111827] dark:border-slate-800 flex-1 flex flex-col justify-between space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-slate-400 font-medium">Standard template printouts, consent sheets, and PDF slips.</p>
+                <label className="inline-flex items-center space-x-1 px-3 py-1.5 bg-blue-50 text-blue-650 hover:bg-blue-100 rounded-lg text-[10px] font-bold uppercase transition-all shadow-xs border border-blue-150 cursor-pointer dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30">
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>Upload PDF</span>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleUploadFile('printables', e.target.files[0]);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="border border-slate-150 rounded-lg overflow-hidden dark:border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase dark:bg-slate-800/40">
+                    <tr>
+                      <th className="px-3 py-2">Document Name</th>
+                      <th className="px-3 py-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350">
+                    {loadingPrintables ? (
+                      <tr>
+                        <td colSpan={2} className="text-center py-4 italic text-slate-400">Loading printables...</td>
+                      </tr>
+                    ) : printablesList.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="text-center py-4 italic text-slate-400">Folder is empty.</td>
+                      </tr>
+                    ) : (
+                      printablesList.map((file) => (
+                        <tr key={file.name} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                          <td className="px-3 py-2 flex items-center space-x-2 font-medium truncate max-w-[200px]">
+                            <FileText className="h-4 w-4 text-red-500 flex-shrink-0" />
+                            <span title={file.name}>{file.name}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right space-x-1">
+                            <button
+                              onClick={() => handlePrintFile('printables', file.name)}
+                              className="p-1 text-slate-400 hover:text-slate-650 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="Print file"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleViewFile('printables', file.name)}
+                              className="p-1 text-slate-400 hover:text-brand-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="View file"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFile('printables', file.name)}
+                              className="p-1 text-slate-400 hover:text-red-650 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="Delete file"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Folder: Document Vault */}
+        <div className="flex flex-col">
+          {/* Folder Tab Shape */}
+          <div className="self-start px-4 py-2 bg-emerald-600 dark:bg-emerald-800 text-white rounded-t-lg font-black text-xs uppercase tracking-wider flex items-center space-x-1.5 shadow-sm border border-b-0 border-emerald-600 dark:border-emerald-800">
+            <FolderOpen className="h-4 w-4" />
+            <span>Document Vault</span>
+          </div>
+          {/* Folder Body */}
+          <div className="bg-white rounded-r-xl rounded-bl-xl border border-slate-200 p-5 shadow-sm dark:bg-[#111827] dark:border-slate-800 flex-1 flex flex-col justify-between space-y-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-slate-400 font-medium">Secured data archive for records, medical history exports, and backups.</p>
+                <label className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-50 text-emerald-650 hover:bg-emerald-100 rounded-lg text-[10px] font-bold uppercase transition-all shadow-xs border border-emerald-150 cursor-pointer dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30">
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>Upload File</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleUploadFile('vault', e.target.files[0]);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="border border-slate-150 rounded-lg overflow-hidden dark:border-slate-800">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase dark:bg-slate-800/40">
+                    <tr>
+                      <th className="px-3 py-2">File Name</th>
+                      <th className="px-3 py-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350">
+                    {loadingVault ? (
+                      <tr>
+                        <td colSpan={2} className="text-center py-4 italic text-slate-400">Loading document vault...</td>
+                      </tr>
+                    ) : vaultList.length === 0 ? (
+                      <tr>
+                        <td colSpan={2} className="text-center py-4 italic text-slate-400">Folder is empty.</td>
+                      </tr>
+                    ) : (
+                      vaultList.map((file) => (
+                        <tr key={file.name} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                          <td className="px-3 py-2 flex items-center space-x-2 font-medium truncate max-w-[200px]">
+                            <FileText className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                            <span title={file.name}>{file.name}</span>
+                          </td>
+                          <td className="px-3 py-2 text-right space-x-1">
+                            <button
+                              onClick={() => handlePrintFile('vault', file.name)}
+                              className="p-1 text-slate-400 hover:text-slate-650 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="Print file"
+                            >
+                              <Printer className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleViewFile('vault', file.name)}
+                              className="p-1 text-slate-400 hover:text-brand-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="View file"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFile('vault', file.name)}
+                              className="p-1 text-slate-400 hover:text-red-650 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                              title="Delete file"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* Manual System Backup Console Card (Full Width) */}
