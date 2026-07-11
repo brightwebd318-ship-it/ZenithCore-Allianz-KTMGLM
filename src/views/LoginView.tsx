@@ -123,11 +123,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md bg-white/80 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-8 shadow-2xl transition-all duration-300">
 
         {/* Brand Header */}
-        <div className="flex flex-col items-center justify-center mb-8">
+        <div className="flex flex-col items-center justify-center mb-8 h-14 overflow-hidden">
           <img
             src="/logo.png"
             alt="PraxDoc Logo"
             className="h-14 w-auto object-contain mb-2"
+            style={{ transform: 'scale(1.75)' }}
           />
         </div>
 
@@ -209,11 +210,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
       </div>
 
       {/* PraxDoc Logo Below Login Window */}
-      <div className="mt-6 flex flex-col items-center justify-center">
+      <div className="mt-6 flex flex-col items-center justify-center h-44 overflow-hidden w-full">
         <img
           src="/praxdoc_logo.png"
           alt="PraxDoc Logo"
           className="h-44 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity"
+          style={{ transform: 'scale(1.75)' }}
         />
       </div>
     </div>

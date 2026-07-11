@@ -248,18 +248,19 @@ export const Layout: React.FC<LayoutProps> = ({
       }`}>
         <div>
           {/* Logo Brand Header */}
-          <div className="py-4 flex items-center px-2 border-b border-slate-150 dark:border-slate-800 bg-slate-50/55 dark:bg-[#111827] justify-center overflow-hidden relative">
+          <div className="py-2 flex items-center px-2 border-b border-slate-150 dark:border-slate-800 bg-slate-50/55 dark:bg-[#111827] justify-center overflow-hidden relative">
             <button
               onClick={() => {
                 setActiveTab('Dashboard');
                 setMobileMenuOpen(false);
               }}
-              className="outline-none focus:outline-none flex justify-center w-full"
+              className="outline-none focus:outline-none flex justify-center w-full overflow-hidden h-20"
             >
               <img 
                 src="/logo.png" 
                 alt="PraxDoc Logo" 
-                className="h-36 w-auto object-contain cursor-pointer"
+                className="h-20 w-auto object-contain cursor-pointer"
+                style={{ transform: 'scale(1.75)' }}
               />
             </button>
             <button
