@@ -56,6 +56,9 @@ import {
   deleteStaffAction,
   deleteExpenseAction,
   updateExpenseAction,
+  getStaffRolesAction,
+  addStaffRoleAction,
+  deleteStaffRoleAction,
 } from '../app/actions';
 
 export const capitalizeName = (str: string): string => {
@@ -104,6 +107,16 @@ export const formatHours = (hoursDecimal: number): string => {
   return hrStr || minStr || '0 hr';
 };
 
+export const getEffectiveInvoices = (allInvoices: Invoice[]): Invoice[] => {
+  const sorted = [...allInvoices].sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+  const map = new Map<string, Invoice>();
+  for (const inv of sorted) {
+    const baseId = inv.resource_fhir?.original_invoice_id || inv.id.replace(/-EDITED/g, '');
+    map.set(baseId, inv);
+  }
+  return Array.from(map.values());
+};
+
 // Types corresponding exactly to PostgreSQL schema
 export interface Tenant {
   id: string;
@@ -124,7 +137,7 @@ export interface User {
   tenant_id: string;
   email: string;
   full_name: string;
-  position_role: 'Admin' | 'Senior Therapist' | 'Receptionist';
+  position_role: string;
   medical_council_registration_no: string;
   can_view_personal_data: boolean;
   can_view_medical_history: boolean;
@@ -141,6 +154,7 @@ export interface User {
 export interface Patient {
   id: string;
   tenant_id: string;
+  patient_seq?: number;
   abha_number: string | null;
   abha_address: string | null;
   gstin: string | null;
@@ -170,7 +184,7 @@ export interface Invoice {
   patient_id: string;
   generated_by: string | null;
   session_count_incremented: number;
-  associated_practitioner_id: string;
+  associated_practitioner_id: string | null;
   apply_gst: boolean;
   cgst_rate: number;
   sgst_rate: number;
@@ -875,7 +889,7 @@ export const dataService = {
     email: string,
     password?: string,
     fullName?: string,
-    role?: 'Admin' | 'Senior Therapist' | 'Receptionist',
+    role?: string,
     targetUserId?: string
   ): Promise<string> => {
     {
@@ -1192,7 +1206,7 @@ export const dataService = {
       igst_rate: 0,
       computed_tax_amount,
       total_amount,
-      payment_status: 'pending',
+      payment_status: 'paid',
       created_at: createdAt || new Date().toISOString(),
       resource_fhir: {
         resourceType: 'Invoice',
@@ -1202,7 +1216,7 @@ export const dataService = {
         totalGross: { value: total_amount, currency: 'INR' },
         lineItem: [
           ...(sessions > 0 ? [{
-            description: 'Therapy Session Units',
+            description: sessionDescription || 'Therapy Session Units',
             quantity: sessions,
             priceComponent: [{
               type: 'base',
@@ -1261,7 +1275,15 @@ export const dataService = {
       }
       
       return res;
-      }
+    }
+  },
+  
+  addInvoiceAction: async (token: string, payload: any): Promise<Invoice> => {
+    return addInvoiceAction(token, payload);
+  },
+
+  getAuthToken: async (): Promise<string> => {
+    return getAuthToken();
   },
 
   updateInvoiceStatus: async (invoiceId: string, status: Invoice['payment_status']): Promise<Invoice> => {
@@ -2165,6 +2187,25 @@ export const dataService = {
   clearCache: () => {
     cachedTenant = null;
   },
+
+  // STAFF ROLES
+  getStaffRoles: async (): Promise<Array<{ id: string; role_name: string }>> => {
+    try {
+      const token = await getAuthToken();
+      return await getStaffRolesAction(token);
+    } catch (err) {
+      console.warn("Using offline fallback roles:", err);
+      return [];
+    }
+  },
+  addStaffRole: async (roleName: string): Promise<any> => {
+    const token = await getAuthToken();
+    return addStaffRoleAction(token, roleName);
+  },
+  deleteStaffRole: async (roleId: string): Promise<void> => {
+    const token = await getAuthToken();
+    await deleteStaffRoleAction(token, roleId);
+  }
 };
 
 export interface Attendance {

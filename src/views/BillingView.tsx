@@ -59,6 +59,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
   // Modals
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
   const [printableInvoice, setPrintableInvoice] = useState<Invoice | null>(null);
+  const [isPreviewOnly, setIsPreviewOnly] = useState(false);
 
   const loadBillingData = async () => {
     try {
@@ -156,7 +157,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPatientId || !selectedStaffId) return;
+    if (!selectedPatientId || !selectedStaffId || !selectedPatient) return;
 
     try {
       const actualSessionsCount = sessionsCount === '' ? 0 : Number(sessionsCount);
@@ -177,6 +178,59 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
 
       const totalSessionsCount = actualSessionsCount + customSessionsCount;
 
+      const selectedService = services.find(s => s.id === selectedServiceId);
+      const sessionDescription = selectedService ? selectedService.name : 'Therapy Session Units';
+
+      const invoiceDate = invoiceDateMode === 'today' ? new Date().toISOString() : new Date(customInvoiceDate).toISOString();
+
+      // Create a temporary mock Invoice object for preview
+      const mockInvoice: Invoice = {
+        id: 'PREVIEW-INVOICE',
+        tenant_id: selectedPatient.tenant_id,
+        patient_id: selectedPatientId,
+        generated_by: null,
+        session_count_incremented: totalSessionsCount,
+        associated_practitioner_id: selectedStaffId,
+        apply_gst: applyGst,
+        cgst_rate: applyGst ? 9 : 0,
+        sgst_rate: applyGst ? 9 : 0,
+        igst_rate: 0,
+        computed_tax_amount: applyGst ? baseAmount * 0.18 : 0,
+        total_amount: applyGst ? baseAmount * 1.18 : baseAmount,
+        payment_status: 'paid',
+        resource_fhir: {
+          resourceType: 'Invoice',
+          identifier: [{ value: 'PREVIEW' }],
+          date: invoiceDate,
+          lineItem: [
+            ...(actualSessionsCount > 0 ? [{
+              description: sessionDescription,
+              quantity: actualSessionsCount,
+              priceComponent: [{ amount: { value: actualRatePerSession } }]
+            }] : []),
+            ...customItems.map(item => ({
+              description: item.name,
+              quantity: item.quantity,
+              priceComponent: [{ amount: { value: item.rate } }]
+            }))
+          ]
+        },
+        created_at: invoiceDate
+      };
+
+      setPrintableInvoice(mockInvoice);
+      setIsPreviewOnly(true);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const savePreviewInvoice = async (shouldPrint: boolean) => {
+    if (!printableInvoice) return;
+    try {
+      const applyGst = printableInvoice.apply_gst;
+      const baseAmount = printableInvoice.total_amount / (applyGst ? 1.18 : 1);
+      
       // Deduct inventory count for items that came from catalog
       for (const item of customItems) {
         if (item.inventoryId) {
@@ -188,35 +242,29 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
         }
       }
 
-      const selectedService = services.find(s => s.id === selectedServiceId);
-      const sessionDescription = selectedService ? selectedService.name : 'Therapy Session Units';
-
-      const invoiceDate = invoiceDateMode === 'today' ? new Date().toISOString() : new Date(customInvoiceDate).toISOString();
-
+      // Add actual invoice to database
       const newInv = await dataService.addInvoice(
-        selectedPatientId,
-        totalSessionsCount,
-        selectedStaffId,
+        printableInvoice.patient_id,
+        printableInvoice.session_count_incremented,
+        printableInvoice.associated_practitioner_id || '',
         applyGst,
         baseAmount,
         customItems.map(item => ({ name: item.name, quantity: item.quantity, rate: item.rate })),
-        sessionDescription,
-        invoiceDate
+        printableInvoice.resource_fhir?.lineItem?.[0]?.description || 'Therapy Session Units',
+        printableInvoice.created_at || new Date().toISOString()
       );
 
-      // Reset
+      // Reset input form states since it's now finalized/saved!
       setCustomItems([]);
       setSessionsCount('');
       setRatePerSession('');
       setSelectedServiceId('custom');
-      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Generated new invoice ledger trace for patient ID: ${selectedPatientId}`);
-      
-      // Open print overlay
-      setPrintableInvoice(newInv);
-      
+
+      await dataService.addAuditTrail('FINANCIAL_MUTATION', `Generated new invoice ledger trace for patient ID: ${printableInvoice.patient_id}`);
+
       // Send email if patient has one
       try {
-        const patientData = patients.find(p => p.id === selectedPatientId);
+        const patientData = patients.find(p => p.id === printableInvoice.patient_id);
         if (patientData && patientData.resource_fhir?.telecom) {
           const emailTelecom = patientData.resource_fhir.telecom.find((t: any) => t.system === 'email');
           if (emailTelecom && emailTelecom.value) {
@@ -233,9 +281,13 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
               return { description: item.description, quantity: qty, rate: rate };
             });
 
+            // Format patientName with zero-padded sequential patient_seq ID
+            const patientSeqStr = patientData.patient_seq ? ` (${String(patientData.patient_seq).padStart(4, '0')})` : '';
+            const patientNameFormatted = `${patientData.resource_fhir?.name?.[0]?.given?.[0]} ${patientData.resource_fhir?.name?.[0]?.family || ''}${patientSeqStr}`;
+
             const invoiceDetails = {
               invoiceNum: newInv.resource_fhir?.identifier?.[0]?.value || newInv.id,
-              patientName: `${patientData.resource_fhir?.name?.[0]?.given?.[0]} ${patientData.resource_fhir?.name?.[0]?.family}`,
+              patientName: patientNameFormatted,
               practitionerName: practitioner,
               created_at: newInv.created_at,
               total_amount: newInv.total_amount,
@@ -252,10 +304,20 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
       } catch (emailErr) {
         console.error("Failed to send invoice email:", emailErr);
       }
-      
+
+      setPrintableInvoice(newInv);
+      setIsPreviewOnly(false);
       triggerRefresh();
+
+      if (shouldPrint) {
+        setTimeout(() => {
+          window.print();
+          handleUpdateStatus(newInv.id, 'PAID');
+        }, 500);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Failed to save preview invoice:", err);
+      alert("Failed to save invoice.");
     }
   };
 
@@ -814,24 +876,52 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                 Receipt Document Viewer
               </span>
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    window.print();
-                    handleUpdateStatus(printableInvoice.id, 'PAID');
-                  }}
-                  className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-brand-600 transition-all flex items-center space-x-1 shadow-sm"
-                >
-                  <span>🖨️ Print / Save PDF</span>
-                </button>
-                <button
-                  onClick={() => {
-                    handleUpdateStatus(printableInvoice.id, 'PAID');
-                    setPrintableInvoice(null);
-                  }}
-                  className="bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-all"
-                >
-                  Close
-                </button>
+                {isPreviewOnly ? (
+                  <>
+                    <button
+                      onClick={() => savePreviewInvoice(false)}
+                      className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-emerald-700 transition-all flex items-center space-x-1 shadow-sm"
+                    >
+                      <span>✔️ Confirm</span>
+                    </button>
+                    <button
+                      disabled={true}
+                      className="bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-650 text-xs font-bold px-3 py-1.5 rounded flex items-center space-x-1 cursor-not-allowed border border-slate-300 dark:border-slate-700"
+                      title="Please click Confirm to enable print options"
+                    >
+                      <span>🖨️ Print / Save PDF (Confirm first)</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPrintableInvoice(null);
+                        setIsPreviewOnly(false);
+                      }}
+                      className="bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-all"
+                    >
+                      Close
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        window.print();
+                        handleUpdateStatus(printableInvoice.id, 'PAID');
+                      }}
+                      className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-brand-600 transition-all flex items-center space-x-1 shadow-sm"
+                    >
+                      <span>🖨️ Print / Save PDF</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setPrintableInvoice(null);
+                      }}
+                      className="bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-all"
+                    >
+                      Close
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -861,7 +951,8 @@ export const BillingView: React.FC<BillingViewProps> = ({ triggerRefresh, trigge
                     <p className="font-bold text-slate-800 dark:text-slate-100">
                       {(() => {
                         const patient = patients.find(p => p.id === printableInvoice.patient_id);
-                        return patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family}` : 'Unknown Patient';
+                        const seqStr = patient?.patient_seq ? ` (${String(patient.patient_seq).padStart(4, '0')})` : '';
+                        return patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family || ''}${seqStr}` : 'Unknown Patient';
                       })()}
                     </p>
                     {(() => {

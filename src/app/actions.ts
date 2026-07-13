@@ -1120,3 +1120,37 @@ export async function updateClinicalLogAction(accessToken: string, logId: string
   if (error) throw error;
   return data;
 }
+
+export async function getStaffRolesAction(accessToken: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase
+    .from('staff_roles')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('role_name', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function addStaffRoleAction(accessToken: string, roleName: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const tenantId = await getTenantIdFromToken(supabase);
+  const { data, error } = await supabase
+    .from('staff_roles')
+    .insert([{ tenant_id: tenantId, role_name: roleName }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteStaffRoleAction(accessToken: string, roleId: string) {
+  const supabase = createServerSupabaseClient(accessToken);
+  const { error } = await supabase
+    .from('staff_roles')
+    .delete()
+    .eq('id', roleId);
+  if (error) throw error;
+  return true;
+}

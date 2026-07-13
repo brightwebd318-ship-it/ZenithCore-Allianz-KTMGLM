@@ -10,7 +10,7 @@ import {
   TrendingDown,
   DollarSign
 } from 'lucide-react';
-import { dataService, formatHours } from '../services/dataService';
+import { dataService, formatHours, getEffectiveInvoices } from '../services/dataService';
 import type { User as StaffUser, ScheduledSession, BusinessExpense, Invoice, ClinicalLog, Tenant } from '../services/dataService';
 
 import { AttendanceView } from './AttendanceView';
@@ -61,7 +61,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
       setExpenses(exps);
 
       const invs = await dataService.getInvoices();
-      setInvoices(invs);
+      setInvoices(getEffectiveInvoices(invs));
 
       const logs = await dataService.getAllClinicalLogs();
       setClinicalLogs(logs);

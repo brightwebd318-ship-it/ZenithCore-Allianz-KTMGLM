@@ -12,7 +12,7 @@ import {
   Camera,
   X
 } from 'lucide-react';
-import { dataService, formatHours } from '../services/dataService';
+import { dataService, formatHours, getEffectiveInvoices } from '../services/dataService';
 import type { Tenant, User as StaffUser, Attendance, ClinicalLog } from '../services/dataService';
 
 interface DashboardViewProps {
@@ -88,7 +88,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
     try {
       const patients = await dataService.getPatients();
       const appointments = await dataService.getScheduledSessions();
-      const invoices = await dataService.getInvoices();
+      const rawInvoices = await dataService.getInvoices();
+      const invoices = getEffectiveInvoices(rawInvoices);
 
       // Current calendar year & month helper
       const now = new Date();

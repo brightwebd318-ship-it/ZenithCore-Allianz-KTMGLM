@@ -21,7 +21,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [tabsExpanded, setTabsExpanded] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'Admin' | 'Senior Therapist' | 'Receptionist'>('Senior Therapist');
+  const [role, setRole] = useState<string>('Senior Therapist');
   const [medNo, setMedNo] = useState('');
   const [baseSalary, setBaseSalary] = useState(45000);
   const [bonusEnabled, setBonusEnabled] = useState(true);
@@ -50,7 +50,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [editingUser, setEditingUser] = useState<StaffUser | null>(null);
   const [editFullName, setEditFullName] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editRole, setEditRole] = useState<'Admin' | 'Senior Therapist' | 'Receptionist'>('Senior Therapist');
+  const [editRole, setEditRole] = useState<string>('Senior Therapist');
   const [editMedNo, setEditMedNo] = useState('');
   const [editBaseSalary, setEditBaseSalary] = useState(45000);
   const [editBonusEnabled, setEditBonusEnabled] = useState(true);
@@ -62,6 +62,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   const [editPrimaryContactName, setEditPrimaryContactName] = useState('');
   const [editPrimaryContactPhone, setEditPrimaryContactPhone] = useState('');
   const [tenantInfo, setTenantInfo] = useState<any>(null);
+  const [customRoles, setCustomRoles] = useState<Array<{ id: string; role_name: string }>>([]);
 
   const loadStaffData = async () => {
     try {
@@ -73,6 +74,12 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
       }
       const tInfo = await dataService.getTenant();
       setTenantInfo(tInfo);
+      try {
+        const roles = await dataService.getStaffRoles();
+        setCustomRoles(roles);
+      } catch (roleErr) {
+        console.warn("Failed to load staff roles in directory:", roleErr);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -132,12 +139,15 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
   };
 
   const defaultTabsForRole = (roleName: string) => {
-    if (roleName === 'Admin') {
+    const rLower = roleName.toLowerCase();
+    if (rLower === 'admin') {
       return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Salary', 'Billing', 'Inventory', 'Staff', 'Reports'];
-    } else if (roleName === 'Senior Therapist') {
+    } else if (rLower === 'senior therapist') {
       return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Reports'];
-    } else {
+    } else if (rLower === 'receptionist') {
       return ['Dashboard', 'Patients', 'Appointments', 'Tasks', 'Billing', 'Inventory'];
+    } else {
+      return ['Dashboard', 'Patients', 'Appointments', 'Tasks'];
     }
   };
 
@@ -839,7 +849,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                   <select
                     value={role}
                     onChange={(e) => {
-                      const val = e.target.value as any;
+                      const val = e.target.value;
                       setRole(val);
                       setSelectedTabs(defaultTabsForRole(val));
                     }}
@@ -848,6 +858,14 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                     <option value="Admin">Admin</option>
                     <option value="Senior Therapist">Senior Therapist</option>
                     <option value="Receptionist">Receptionist</option>
+                    {customRoles.map((r) => {
+                      const capitalized = r.role_name.charAt(0).toUpperCase() + r.role_name.slice(1).toLowerCase();
+                      return (
+                        <option key={r.id} value={r.role_name}>
+                          {capitalized}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -1007,12 +1025,20 @@ export const StaffView: React.FC<StaffViewProps> = ({ triggerRefresh, triggerRef
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Position / Role</label>
                   <select
                     value={editRole}
-                    onChange={(e) => setEditRole(e.target.value as any)}
+                    onChange={(e) => setEditRole(e.target.value)}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-850 dark:text-slate-200"
                   >
                     <option value="Admin">Admin</option>
                     <option value="Senior Therapist">Senior Therapist</option>
                     <option value="Receptionist">Receptionist</option>
+                    {customRoles.map((r) => {
+                      const capitalized = r.role_name.charAt(0).toUpperCase() + r.role_name.slice(1).toLowerCase();
+                      return (
+                        <option key={r.id} value={r.role_name}>
+                          {capitalized}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>

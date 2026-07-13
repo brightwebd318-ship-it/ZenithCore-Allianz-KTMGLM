@@ -613,8 +613,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                     {selectedPatient.resource_fhir?.name?.[0]?.given?.[0]?.[0] || 'P'}
                   </div>
                   <div>
-                    <button onClick={() => setShowProfileModal(true)} className="text-xl font-bold text-slate-900 dark:text-white hover:text-brand-500 hover:underline text-left transition-colors">
-                      {selectedPatient.resource_fhir?.name?.[0]?.given?.[0]} {selectedPatient.resource_fhir?.name?.[0]?.family}
+                    <button onClick={() => setShowProfileModal(true)} className="text-xl font-bold text-slate-900 dark:text-white hover:text-brand-500 hover:underline text-left transition-colors flex items-center">
+                      <span>{selectedPatient.resource_fhir?.name?.[0]?.given?.[0]} {selectedPatient.resource_fhir?.name?.[0]?.family}</span>
+                      {selectedPatient.patient_seq !== undefined && (
+                        <span className="text-[11px] font-mono font-bold text-brand-650 bg-brand-50 dark:bg-brand-950/20 px-2 py-0.5 rounded border border-brand-150 dark:border-brand-900/30 ml-2 shadow-xs">
+                          {String(selectedPatient.patient_seq).padStart(4, '0')}
+                        </span>
+                      )}
                     </button>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center">
                       <User className="h-3 w-3 mr-1" />

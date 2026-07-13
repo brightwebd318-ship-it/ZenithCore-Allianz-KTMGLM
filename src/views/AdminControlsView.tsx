@@ -14,10 +14,12 @@ import {
   Printer,
   Upload,
   FileText,
-  Eye
+  Eye,
+  Users,
+  Lock
 } from 'lucide-react';
-import { dataService } from '../services/dataService';
-import type { SystemAuditTrail, User as StaffUser, Tenant } from '../services/dataService';
+import { dataService, generateUUID } from '../services/dataService';
+import type { SystemAuditTrail, User as StaffUser, Tenant, Invoice, Patient } from '../services/dataService';
 import { isSupabaseConfigured, supabase } from '../services/supabaseClient';
 
 interface AdminControlsViewProps {
@@ -57,6 +59,30 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
   const [vaultList, setVaultList] = useState<any[]>([]);
   const [loadingPrintables, setLoadingPrintables] = useState(false);
   const [loadingVault, setLoadingVault] = useState(false);
+
+  // Bill Management States
+  const [billSearchQuery, setBillSearchQuery] = useState('');
+  const [foundInvoice, setFoundInvoice] = useState<Invoice | null>(null);
+  const [searchingBill, setSearchingBill] = useState(false);
+  const [billEditGst, setBillEditGst] = useState<boolean>(false);
+  const [savingBillEdit, setSavingBillEdit] = useState(false);
+  const [patients, setPatients] = useState<Patient[]>([]);
+
+  // Advanced Line Item Editing
+  const [billLineItems, setBillLineItems] = useState<Array<{ id: string; description: string; quantity: number; rate: number }>>([]);
+  const [selectedCatalogServiceId, setSelectedCatalogServiceId] = useState('custom');
+  const [addServiceLineName, setAddServiceLineName] = useState('');
+  const [addServiceLineRate, setAddServiceLineRate] = useState<number | ''>('');
+  const [addServiceLineQty, setAddServiceLineQty] = useState<number>(1);
+
+  // Preview overlay state
+  const [previewEditedInvoice, setPreviewEditedInvoice] = useState<Invoice | null>(null);
+
+  // Clinic Staff Roles States
+  const [staffRolesList, setStaffRolesList] = useState<Array<{ id: string; role_name: string }>>([]);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [addingRole, setAddingRole] = useState(false);
+  const [loadingRoles, setLoadingRoles] = useState(false);
 
   const handleUploadFile = async (folder: 'printables' | 'vault', file: File) => {
     try {
@@ -198,10 +224,228 @@ export const AdminControlsView: React.FC<AdminControlsViewProps> = ({ triggerRef
       setTenantSettings(tenant);
 
       await loadServices();
+      const pts = await dataService.getPatients();
+      setPatients(pts);
+
+      // Load custom staff roles
+      setLoadingRoles(true);
+      try {
+        const roles = await dataService.getStaffRoles();
+        setStaffRolesList(roles);
+      } catch (roleErr) {
+        console.warn("Failed to load staff roles:", roleErr);
+      } finally {
+        setLoadingRoles(false);
+      }
     } catch (err) {
       console.error('Failed to load admin logs:', err);
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  const cleanUuid = (val: any) => {
+    if (!val || typeof val !== 'string' || val.trim() === '' || val === 'null' || val === 'undefined') return null;
+    return val;
+  };
+
+  const handleAddStaffRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanRoleName = newRoleName.trim().toUpperCase();
+    if (!cleanRoleName) return;
+    
+    // Prevent duplicating system defaults or existing custom roles
+    const defaults = ['ADMIN', 'SENIOR THERAPIST', 'RECEPTIONIST', 'SPECIALIST'];
+    if (defaults.includes(cleanRoleName) || staffRolesList.some(r => r.role_name.toUpperCase() === cleanRoleName)) {
+      alert("This role already exists.");
+      return;
+    }
+
+    setAddingRole(true);
+    try {
+      await dataService.addStaffRole(cleanRoleName);
+      setNewRoleName('');
+      alert(`Role "${cleanRoleName}" registered successfully!`);
+      // Reload roles list
+      const roles = await dataService.getStaffRoles();
+      setStaffRolesList(roles);
+    } catch (err: any) {
+      alert("Failed to add staff role: " + err.message);
+    } finally {
+      setAddingRole(false);
+    }
+  };
+
+  const handleDeleteStaffRole = async (roleId: string, roleName: string) => {
+    if (!confirm(`Are you sure you want to delete the role "${roleName}"?`)) return;
+    try {
+      await dataService.deleteStaffRole(roleId);
+      alert(`Role "${roleName}" deleted successfully.`);
+      // Reload roles list
+      const roles = await dataService.getStaffRoles();
+      setStaffRolesList(roles);
+    } catch (err: any) {
+      alert("Failed to delete staff role: " + err.message);
+    }
+  };
+
+  const handleSearchBill = async () => {
+    if (!billSearchQuery.trim()) return;
+    setSearchingBill(true);
+    setFoundInvoice(null);
+    try {
+      const allInvoices = await dataService.getInvoices();
+      const match = allInvoices.find(
+        (inv) =>
+          inv.id.toLowerCase() === billSearchQuery.trim().toLowerCase() ||
+          inv.resource_fhir?.identifier?.[0]?.value?.toLowerCase() === billSearchQuery.trim().toLowerCase()
+      );
+      if (match) {
+        setFoundInvoice(match);
+        setBillEditGst(match.apply_gst);
+
+        // Map line items
+        const rawLines = match.resource_fhir?.lineItem || [];
+        const mappedLines = rawLines.map((item: any, idx: number) => ({
+          id: `line-${idx}-${Date.now()}`,
+          description: item.description || 'Service',
+          quantity: Number(item.quantity) || 1,
+          rate: Number(item.priceComponent?.[0]?.amount?.value) || 0
+        }));
+
+        if (mappedLines.length === 0 && match.session_count_incremented > 0) {
+          const baseSubtotal = match.total_amount / (match.apply_gst ? 1.18 : 1);
+          mappedLines.push({
+            id: 'default-session',
+            description: 'Therapy Session Units',
+            quantity: match.session_count_incremented,
+            rate: match.session_count_incremented > 0 ? baseSubtotal / match.session_count_incremented : baseSubtotal
+          });
+        }
+        setBillLineItems(mappedLines);
+      } else {
+        alert("No invoice found with that bill number.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error searching invoice.");
+    } finally {
+      setSearchingBill(false);
+    }
+  };
+
+  const handleSaveBillEdit = async () => {
+    if (!foundInvoice) return;
+    setSavingBillEdit(true);
+    try {
+      const subtotal = billLineItems.reduce((sum, item) => sum + item.quantity * item.rate, 0);
+      const taxRate = billEditGst ? 0.18 : 0;
+      const taxAmount = subtotal * taxRate;
+      const totalAmount = subtotal + taxAmount;
+
+      // Extract sessions count by searching descriptions (matching catalog names or keyword "session")
+      const serviceNames = services.map(s => s.name.toLowerCase());
+      const sessionCount = billLineItems
+        .filter(item => {
+          const descLower = item.description.toLowerCase();
+          return serviceNames.includes(descLower) || descLower.includes('session');
+        })
+        .reduce((sum, item) => sum + item.quantity, 0);
+
+      // 1. Retrieve patient details for audit logging and calculate session balance adjustment
+      const oldSessions = foundInvoice.session_count_incremented || 0;
+      const sessionDelta = sessionCount - oldSessions;
+      
+      let patientName = 'Unknown';
+      const patients = await dataService.getPatients();
+      const patient = patients.find(p => p.id === foundInvoice.patient_id);
+      if (patient) {
+        const nameObj = patient.resource_fhir?.name?.[0];
+        patientName = nameObj ? `${nameObj.given?.[0] || ''} ${nameObj.family || ''}`.trim() : 'Unknown';
+        
+        if (sessionDelta !== 0) {
+          const currentPlanned = patient.resource_fhir?.planned_sessions !== undefined ? Number(patient.resource_fhir.planned_sessions) : 0;
+          const updatedPlanned = currentPlanned + sessionDelta;
+          const updatedResource = {
+            ...patient.resource_fhir,
+            planned_sessions: updatedPlanned
+          };
+          await dataService.updatePatientResource(foundInvoice.patient_id, updatedResource);
+        }
+      }
+
+      // 2. Clone/Insert edited invoice into DB
+      const baseInvoiceId = foundInvoice.resource_fhir?.original_invoice_id || foundInvoice.id;
+      const newInvoiceId = generateUUID();
+
+      // Build payload for new edited invoice
+      const editedInvoice: Invoice = {
+        id: newInvoiceId,
+        tenant_id: foundInvoice.tenant_id,
+        patient_id: foundInvoice.patient_id,
+        generated_by: cleanUuid(currentUser?.id) || cleanUuid(foundInvoice.generated_by),
+        session_count_incremented: sessionCount,
+        associated_practitioner_id: cleanUuid(foundInvoice.associated_practitioner_id),
+        apply_gst: billEditGst,
+        cgst_rate: billEditGst ? 9 : 0,
+        sgst_rate: billEditGst ? 9 : 0,
+        igst_rate: 0,
+        computed_tax_amount: taxAmount,
+        total_amount: totalAmount,
+        payment_status: 'paid', // Update payment status to paid always
+        resource_fhir: {
+          ...(foundInvoice.resource_fhir || {}),
+          original_invoice_id: baseInvoiceId,
+          identifier: [{ value: `${foundInvoice.resource_fhir?.identifier?.[0]?.value || baseInvoiceId}-EDITED` }],
+          totalNet: { value: subtotal, currency: 'INR' },
+          totalGross: { value: totalAmount, currency: 'INR' },
+          lineItem: billLineItems.map(item => ({
+            description: item.description,
+            quantity: item.quantity,
+            priceComponent: [{ type: 'base', factor: item.quantity, amount: { value: item.rate, currency: 'INR' } }]
+          }))
+        },
+        created_at: new Date().toISOString()
+      };
+
+      const token = await dataService.getAuthToken();
+      await dataService.addInvoiceAction(token, editedInvoice);
+
+      // 3. Log Audit Trail
+      const origNum = foundInvoice.resource_fhir?.identifier?.[0]?.value || baseInvoiceId;
+      const newNum = `${origNum}-EDITED`;
+      const editorName = currentUser?.full_name || 'System';
+      await dataService.addAuditTrail(
+        'FINANCIAL_MUTATION',
+        `Edited Invoice: Original UUID ${foundInvoice.id} (${origNum}) archived and replaced with New UUID ${newInvoiceId} (${newNum}). Patient Name: ${patientName}. Old Total: ₹${foundInvoice.total_amount.toLocaleString('en-IN')}, New Total: ₹${totalAmount.toLocaleString('en-IN')}. Old Sessions: ${oldSessions}, New Sessions: ${sessionCount}. Done by: ${editorName}.`
+      );
+
+      // 4. Notify Admins
+      try {
+        const users = await dataService.getUsers();
+        const admins = users.filter((u: any) => u.position_role === 'Admin');
+        const editorName = currentUser?.full_name || 'Administrator';
+        for (const admin of admins) {
+          await dataService.addNotification({
+            user_id: admin.id,
+            title: 'Invoice Modified',
+            description: `Bill ${baseInvoiceId} was edited by ${editorName}. Payouts and patient session quotas adjusted.`,
+            target_id: newInvoiceId
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Failed to notify admins of bill edit:", notifErr);
+      }
+
+      setPreviewEditedInvoice(editedInvoice);
+      setFoundInvoice(null);
+      setBillSearchQuery('');
+      triggerRefresh();
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to save edited invoice: " + (err.message || err));
+    } finally {
+      setSavingBillEdit(false);
     }
   };
 
@@ -651,6 +895,110 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
         </div>
       </div>
 
+      {/* Clinic Staff Roles (CRUD Section) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+          <div className="flex items-center space-x-2">
+            <Users className="h-5 w-5 text-brand-500" />
+            <h3 className="font-bold text-slate-900 dark:text-white">Clinic Staff Roles</h3>
+          </div>
+          <span className="text-[10px] bg-brand-50 border border-brand-100 px-2.5 py-0.5 rounded font-bold text-brand-600 dark:bg-brand-950/20 dark:border-brand-900/30">
+            Role Settings
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
+          {/* Create new role form (4 cols) */}
+          <form onSubmit={handleAddStaffRole} className="md:col-span-4 space-y-3.5 bg-slate-50 dark:bg-slate-800/20 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-350">Register New Staff Role</h4>
+            
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Role Name</label>
+              <input
+                type="text"
+                required
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                placeholder="e.g. CLINICAL TRAINEE"
+                className="w-full rounded border border-slate-200 px-3 py-2 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-brand-500 font-mono font-bold"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={addingRole}
+              className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1 disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              <span>{addingRole ? 'Registering...' : 'Register Role'}</span>
+            </button>
+          </form>
+
+          {/* List of active roles (8 cols) */}
+          <div className="md:col-span-8 space-y-2">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-350">Defined Staff Roles</h4>
+            
+            <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-lg">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-800/40 text-[10px] font-bold text-slate-450 uppercase border-b border-slate-150 dark:border-slate-800 font-mono">
+                    <th className="px-4 py-2.5">Staff Role Name</th>
+                    <th className="px-4 py-2.5 text-center">Type</th>
+                    <th className="px-4 py-2.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350 font-medium">
+                  {/* Render Default locked roles */}
+                  {['ADMIN', 'SENIOR THERAPIST', 'RECEPTIONIST'].map((defaultRole) => (
+                    <tr key={defaultRole} className="bg-slate-50/20 dark:bg-slate-850/10">
+                      <td className="px-4 py-3 font-mono font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">{defaultRole}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                          <Lock className="h-2.5 w-2.5 mr-1" />
+                          System Default
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-[10px] text-slate-400 italic">Protected</td>
+                    </tr>
+                  ))}
+
+                  {/* Render Custom roles */}
+                  {staffRolesList.map((role) => {
+                    const isSystemDefault = ['ADMIN', 'SENIOR THERAPIST', 'RECEPTIONIST', 'SPECIALIST'].includes(role.role_name.toUpperCase());
+                    if (isSystemDefault) return null; // Already rendered in defaults
+                    return (
+                      <tr key={role.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="px-4 py-3 font-mono font-semibold text-slate-800 dark:text-slate-200">{role.role_name}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400">
+                            Custom Role
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleDeleteStaffRole(role.id, role.role_name)}
+                            className="text-red-500 hover:text-red-750 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                            title="Delete custom role"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {staffRolesList.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-3.5 text-center text-slate-400 italic">No additional custom roles configured.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Administrative Vault & Printables Folders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-2">
         
@@ -823,6 +1171,269 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
           </div>
         </div>
 
+      </div>
+
+      {/* Bill Management Console (Full Width) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm dark:bg-[#111827] dark:border-slate-800 space-y-6">
+        <div className="flex items-center space-x-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+          <FileText className="h-5 w-5 text-indigo-650 dark:text-indigo-400" />
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white">Edit invoice</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Search, adjust, and correct issued invoices. Modified bills preserve original copies and propagate session quota updates.</p>
+          </div>
+        </div>
+
+        <div className="max-w-md space-y-3">
+          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Search Bill by Number or ID</label>
+          <div className="flex space-x-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="e.g. INV-0010 or UUID..."
+                value={billSearchQuery}
+                onChange={(e) => setBillSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-lg text-xs font-medium focus:outline-none focus:border-brand-500"
+              />
+            </div>
+            <button
+              onClick={handleSearchBill}
+              disabled={searchingBill}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {searchingBill ? 'Searching...' : 'Search'}
+            </button>
+          </div>
+        </div>
+
+        {foundInvoice && (
+          <div className="mt-4 border border-slate-150 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/10 rounded-xl p-5 space-y-6">
+            <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">
+              Editing Invoice: <span className="font-mono text-brand-650 dark:text-brand-400 font-extrabold">{foundInvoice.resource_fhir?.identifier?.[0]?.value || foundInvoice.id}</span>
+            </h4>
+
+            {/* Read-Only Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium">
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Billed To (Patient)</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {(() => {
+                    const patient = patients.find(p => p.id === foundInvoice.patient_id);
+                    return patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family}` : 'Unknown Patient';
+                  })()}
+                </span>
+              </div>
+              <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Payment status</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400">
+                  PAID
+                </span>
+              </div>
+            </div>
+
+            {/* Line Items Table */}
+            <div className="space-y-2">
+              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Itemized Line Items</h5>
+              <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800/40 text-[10px] font-bold text-slate-400 uppercase border-b border-slate-200 dark:border-slate-800">
+                      <th className="px-3 py-2">Description</th>
+                      <th className="px-3 py-2">Qty</th>
+                      <th className="px-3 py-2">Unit Rate</th>
+                      <th className="px-3 py-2">Total</th>
+                      <th className="px-3 py-2 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350">
+                    {billLineItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-4 text-center text-slate-400 italic">No line items. Add a service to proceed.</td>
+                      </tr>
+                    ) : (
+                      billLineItems.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
+                          <td className="px-3 py-2 font-semibold text-slate-900 dark:text-white">{item.description}</td>
+                          <td className="px-3 py-2 font-mono font-bold">{item.quantity}</td>
+                          <td className="px-3 py-2 font-mono font-bold">₹{item.rate.toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-2 font-mono font-bold text-indigo-650 dark:text-indigo-400">₹{(item.quantity * item.rate).toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBillLineItems(prev => prev.filter(x => x.id !== item.id));
+                              }}
+                              className="text-red-500 hover:text-red-755 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Add New Service Item Form */}
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 space-y-3">
+              <h5 className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Add New Service / Item</h5>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1">Catalog Service</label>
+                  <select
+                    value={selectedCatalogServiceId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedCatalogServiceId(val);
+                      if (val === 'custom') {
+                        setAddServiceLineName('');
+                        setAddServiceLineRate('');
+                      } else {
+                        const srv = services.find(s => s.id === val);
+                        if (srv) {
+                          setAddServiceLineName(srv.name);
+                          setAddServiceLineRate(srv.price);
+                        }
+                      }
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none"
+                  >
+                    <option value="custom">Custom Service / Item</option>
+                    {services.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} (₹{s.price})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1">Item Description / Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Session therapy, Consumables..."
+                    value={addServiceLineName}
+                    onChange={(e) => setAddServiceLineName(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1">Unit Rate (INR)</label>
+                  <input
+                    type="number"
+                    value={addServiceLineRate}
+                    onChange={(e) => setAddServiceLineRate(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1">Quantity</label>
+                  <input
+                    type="number"
+                    value={addServiceLineQty}
+                    onChange={(e) => setAddServiceLineQty(Math.max(1, Number(e.target.value)))}
+                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-mono font-semibold focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!addServiceLineName.trim()) {
+                    alert("Please specify a description.");
+                    return;
+                  }
+                  if (addServiceLineRate === '' || Number(addServiceLineRate) <= 0) {
+                    alert("Please specify a rate.");
+                    return;
+                  }
+                  const newItem = {
+                    id: `line-${Date.now()}`,
+                    description: addServiceLineName.trim(),
+                    quantity: addServiceLineQty,
+                    rate: Number(addServiceLineRate)
+                  };
+                  setBillLineItems(prev => [...prev, newItem]);
+                  // Reset fields
+                  setAddServiceLineName('');
+                  setAddServiceLineRate('');
+                  setAddServiceLineQty(1);
+                  setSelectedCatalogServiceId('custom');
+                }}
+                className="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1 shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Item to Bill</span>
+              </button>
+            </div>
+
+            {/* Calculations & Save Details */}
+            <div className="bg-slate-100 dark:bg-slate-850 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="bill-gst-toggle"
+                  checked={billEditGst}
+                  onChange={(e) => setBillEditGst(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-350 text-brand-500 focus:ring-brand-500"
+                />
+                <label htmlFor="bill-gst-toggle" className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider cursor-pointer select-none">
+                  Apply 18% GST (9% CGST + 9% SGST split)
+                </label>
+              </div>
+
+              {/* Aggregated totals live preview */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-semibold text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-3">
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">Subtotal</span>
+                  <span className="text-sm font-black font-mono text-slate-850 dark:text-slate-200">
+                    ₹{billLineItems.reduce((sum, item) => sum + item.quantity * item.rate, 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">GST (18%)</span>
+                  <span className="text-sm font-black font-mono text-emerald-650 dark:text-emerald-400">
+                    ₹{(billLineItems.reduce((sum, item) => sum + item.quantity * item.rate, 0) * (billEditGst ? 0.18 : 0)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">Total Net Amount</span>
+                  <span className="text-sm font-black font-mono text-indigo-650 dark:text-indigo-400">
+                    ₹{(billLineItems.reduce((sum, item) => sum + item.quantity * item.rate, 0) * (billEditGst ? 1.18 : 1)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">Therapy Sessions</span>
+                  <span className="text-sm font-black font-mono text-slate-850 dark:text-slate-200">
+                    {billLineItems.filter(item => item.description.toLowerCase().includes('session')).reduce((sum, item) => sum + item.quantity, 0)} Units
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Form actions */}
+            <div className="border-t border-slate-200 dark:border-slate-800 pt-4 flex justify-end space-x-2">
+              <button
+                onClick={() => setFoundInvoice(null)}
+                className="bg-slate-200 dark:bg-slate-750 text-slate-700 dark:text-slate-350 font-bold text-xs px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveBillEdit}
+                disabled={savingBillEdit || billLineItems.length === 0}
+                className="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-5 py-2 rounded-lg shadow-sm disabled:opacity-50 transition-colors"
+              >
+                {savingBillEdit ? 'Saving...' : 'Save & Preview'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Manual System Backup Console Card (Full Width) */}
@@ -1019,6 +1630,168 @@ CREATE TABLE inventory_items (id UUID PRIMARY KEY, tenant_id UUID, item_name VAR
           </table>
         </div>
       </div>
+
+      {/* Printable Invoice Modal (Screen Only Overlay) */}
+      {previewEditedInvoice && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              body * {
+                visibility: hidden !important;
+              }
+              #printable-invoice-area, #printable-invoice-area * {
+                visibility: visible !important;
+              }
+              #printable-invoice-area {
+                position: absolute !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                top: 0 !important;
+                width: 18cm !important;
+                margin-top: 1cm !important;
+                padding: 1.5cm !important;
+                background: white !important;
+                color: black !important;
+                box-shadow: none !important;
+                border: none !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+          ` }} />
+
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden dark:bg-slate-900 dark:border-slate-850">
+            {/* Top Bar for Actions (Screen Only) */}
+            <div className="bg-slate-100 border-b border-slate-200 px-6 py-4 flex justify-between items-center dark:bg-slate-800 dark:border-slate-700 no-print">
+              <span className="font-extrabold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Receipt Document Viewer (EDITED BILL)
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => {
+                    window.print();
+                  }}
+                  className="bg-brand-500 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-brand-600 transition-all flex items-center space-x-1 shadow-sm"
+                >
+                  <span>🖨️ Print / Save PDF</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setPreviewEditedInvoice(null);
+                  }}
+                  className="bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Document Content View */}
+            <div className="p-8 max-h-[75vh] overflow-y-auto bg-white dark:bg-slate-900 print:max-h-[14cm] print:overflow-hidden print:break-inside-avoid print:p-4 print:border-2 print:border-slate-800 print:rounded-none print:m-0" id="printable-invoice-area">
+              <div className="space-y-4 print:space-y-2">
+                {/* Header branding */}
+                <div className="flex justify-between items-start border-b border-slate-200 pb-3 print:pb-2 dark:border-slate-800">
+                  <div className="flex items-center">
+                    <img src="/logo.png" alt="Clinic" className="h-12 w-auto object-contain print:h-10" />
+                  </div>
+                  <div className="text-right flex flex-col items-end justify-center">
+                    <span className="text-xs font-mono font-bold bg-slate-100 text-slate-800 px-3 py-1.5 rounded dark:bg-slate-800 dark:text-slate-200">
+                      {previewEditedInvoice.resource_fhir?.identifier?.[0]?.value || previewEditedInvoice.id}
+                    </span>
+                    <span className="block text-[10px] text-slate-400 mt-2 font-bold uppercase">
+                      Date: {new Date(previewEditedInvoice.created_at || '').toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bill To & Bill From info */}
+                <div className="grid grid-cols-2 gap-6 text-xs border-b border-slate-100 pb-4 dark:border-slate-800/60">
+                  <div>
+                    <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-1.5">Billed To (Patient)</h4>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">
+                      {(() => {
+                        const patient = patients.find(p => p.id === previewEditedInvoice.patient_id);
+                        const seqStr = patient?.patient_seq ? ` (${String(patient.patient_seq).padStart(4, '0')})` : '';
+                        return patient ? `${patient.resource_fhir?.name?.[0]?.given?.[0]} ${patient.resource_fhir?.name?.[0]?.family || ''}${seqStr}` : 'Unknown Patient';
+                      })()}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-[10px] uppercase font-bold text-slate-400 mb-1.5">Billed by</h4>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">
+                      {currentUser?.full_name || 'Clinic Specialist'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Line Items Table */}
+                <div className="space-y-2">
+                  <h4 className="text-[10px] uppercase font-bold text-slate-400">Itemized Breakdown</h4>
+                  <table className="w-full text-left border-collapse border border-slate-100 dark:border-slate-800 text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-850 text-slate-500 dark:text-slate-400 border-b border-slate-150 dark:border-slate-800">
+                        <th className="px-3 py-2 font-bold">Item & Description</th>
+                        <th className="px-3 py-2 text-right font-bold">Rate</th>
+                        <th className="px-3 py-2 text-center font-bold">Qty</th>
+                        <th className="px-3 py-2 text-right font-bold">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-855 text-slate-700 dark:text-slate-350">
+                      {(previewEditedInvoice.resource_fhir?.lineItem || []).map((item: any, idx: number) => {
+                        const qty = item.quantity || 1;
+                        const rate = item.priceComponent?.[0]?.amount?.value || 0;
+                        return (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 font-medium">{item.description}</td>
+                            <td className="px-3 py-2 text-right font-mono font-semibold">₹{rate.toLocaleString('en-IN')}</td>
+                            <td className="px-3 py-2 text-center font-mono font-semibold">{qty}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-slate-900 dark:text-white">₹{(qty * rate).toLocaleString('en-IN')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals Summary */}
+                <div className="flex justify-end pt-3">
+                  <div className="w-64 space-y-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    <div className="flex justify-between">
+                      <span>Subtotal Net:</span>
+                      <span className="font-mono text-slate-800 dark:text-slate-200">₹{(previewEditedInvoice.total_amount - previewEditedInvoice.computed_tax_amount).toLocaleString('en-IN')}</span>
+                    </div>
+
+                    {previewEditedInvoice.apply_gst && (
+                      <>
+                        <div className="flex justify-between text-[11px] text-slate-400">
+                          <span>CGST (9%):</span>
+                          <span className="font-mono">₹{(previewEditedInvoice.computed_tax_amount / 2).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-slate-400">
+                          <span>SGST (9%):</span>
+                          <span className="font-mono">₹{(previewEditedInvoice.computed_tax_amount / 2).toLocaleString('en-IN')}</span>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-black dark:border-slate-800 text-slate-800 dark:text-white">
+                      <span>Total Amount:</span>
+                      <span className="font-mono text-indigo-650 dark:text-indigo-400">₹{previewEditedInvoice.total_amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Notice */}
+                <div className="border-t border-slate-100 pt-4 text-[10px] text-slate-450 dark:text-slate-500 leading-relaxed font-medium">
+                  <p>* This receipt constitutes a corrected / modified copy of the original transaction ledger trace. All actions are digitally signed and audited.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

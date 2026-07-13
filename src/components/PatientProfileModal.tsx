@@ -183,6 +183,12 @@ export default function PatientProfileModal({ patient, isOpen, onClose, onSave }
               </h4>
               <div className="space-y-4">
                 <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Patient ID (Uneditable)</label>
+                  <p className="font-mono font-bold text-brand-600 dark:text-brand-400 bg-brand-50/50 dark:bg-brand-950/20 border border-brand-100 dark:border-brand-900/30 px-3 py-1.5 rounded inline-block text-xs">
+                    {patient.patient_seq ? String(patient.patient_seq).padStart(4, '0') : '-'}
+                  </p>
+                </div>
+                <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">14-Digit ABHA Number</label>
                   {isEditing ? <input type="text" className="w-full rounded border px-3 py-1.5 text-sm dark:bg-slate-800 dark:border-slate-700" value={getValue('abha_number')} onChange={e => handleChange('abha_number', e.target.value)} /> : <p className="font-mono font-bold text-slate-700 dark:text-slate-300">{getValue('abha_number') || '-'}</p>}
                 </div>
