@@ -12,7 +12,11 @@ import {
   Search,
   CreditCard,
   Eye,
-  Trash2
+  Trash2,
+  Activity,
+  UserCheck,
+  Award,
+  Pencil
 } from 'lucide-react';
 import { dataService } from '../services/dataService';
 import type { Patient, ClinicalLog, User as StaffUser, Invoice, ScheduledSession } from '../services/dataService';
@@ -59,6 +63,21 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
   const [newLogSummary, setNewLogSummary] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [logSessionsCount, setLogSessionsCount] = useState<number | ''>(0);
+  const [logDateMode, setLogDateMode] = useState<'today' | 'custom'>('today');
+  const [customLogDate, setCustomInvoiceDate] = useState(() => {
+    const now = new Date();
+    const tzOffset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+  });
+  const [logStaffId, setLogStaffId] = useState(currentUser?.id || '');
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentUser?.id && !logStaffId) {
+      setLogStaffId(currentUser.id);
+    }
+  }, [currentUser]);
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
@@ -355,19 +374,55 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
         }
       }
       
-      await dataService.addClinicalLog(selectedPatient.id, newLogSummary, attachments);
+      const actualSessionsCount = logSessionsCount === '' ? 0 : Number(logSessionsCount);
+      const logDate = logDateMode === 'today' ? new Date().toISOString() : new Date(customLogDate).toISOString();
+
+      if (editingLogId) {
+        await dataService.updateClinicalLog(editingLogId, selectedPatient.id, newLogSummary, actualSessionsCount, logStaffId, logDate);
+        setEditingLogId(null);
+      } else {
+        await dataService.addClinicalLog(selectedPatient.id, newLogSummary, attachments, logDate, actualSessionsCount, logStaffId);
+      }
       setNewLogSummary('');
       setSelectedFile(null);
+      setLogSessionsCount(0);
+      setLogDateMode('today');
       
-      // Reload logs
+      // Reload logs and sync patient planned sessions count immediately
       const updatedLogs = await dataService.getClinicalLogs(selectedPatient.id);
       setLogs(updatedLogs);
+
+      const allPats = await dataService.getPatients();
+      setPatients(allPats);
+      const updatedPat = allPats.find(p => p.id === selectedPatient.id);
+      if (updatedPat) {
+        setSelectedPatient(updatedPat);
+      }
       
       const patientName = selectedPatient.resource_fhir?.name?.[0]?.given?.[0]
         ? `${selectedPatient.resource_fhir.name[0].given[0]} ${selectedPatient.resource_fhir.name[0].family || ''}`
         : 'Unknown Patient';
       
       await dataService.addAuditTrail('READ_PATIENT', `Added clinical impression with document attachment to patient: ${patientName} (ID: ${selectedPatient.id})`);
+
+      // Notify all admins of the clinical log addition with session count details
+      try {
+        const users = await dataService.getUsers();
+        const admins = users.filter(u => u.position_role === 'Admin');
+        const selectedStaffName = staffList.find(s => s.id === logStaffId)?.full_name || currentUser?.full_name || 'A staff member';
+        const sessionsUsed = actualSessionsCount > 0 ? `${actualSessionsCount} sessions` : '0 sessions';
+        
+        for (const admin of admins) {
+          await dataService.addNotification({
+            user_id: admin.id,
+            title: 'Clinical Log Added',
+            description: `New clinical note added for patient ${patientName} on behalf of ${selectedStaffName} (Session count: ${sessionsUsed})`,
+          });
+        }
+      } catch (notifErr) {
+        console.warn("Failed to notify admins of clinical log addition:", notifErr);
+      }
+
       triggerRefresh();
     } catch (err: any) {
       console.error(err);
@@ -401,6 +456,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
       // Reload logs
       const updatedLogs = await dataService.getClinicalLogs(selectedPatient.id);
       setLogs(updatedLogs);
+
+      const allPats = await dataService.getPatients();
+      setPatients(allPats);
+      const updatedPat = allPats.find(p => p.id === selectedPatient.id);
+      if (updatedPat) {
+        setSelectedPatient(updatedPat);
+      }
       
       const patientName = selectedPatient.resource_fhir?.name?.[0]?.given?.[0]
         ? `${selectedPatient.resource_fhir.name[0].given[0]} ${selectedPatient.resource_fhir.name[0].family || ''}`
@@ -551,8 +613,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                     {selectedPatient.resource_fhir?.name?.[0]?.given?.[0]?.[0] || 'P'}
                   </div>
                   <div>
-                    <button onClick={() => setShowProfileModal(true)} className="text-xl font-bold text-slate-900 dark:text-white hover:text-brand-500 hover:underline text-left transition-colors">
-                      {selectedPatient.resource_fhir?.name?.[0]?.given?.[0]} {selectedPatient.resource_fhir?.name?.[0]?.family}
+                    <button onClick={() => setShowProfileModal(true)} className="text-xl font-bold text-slate-900 dark:text-white hover:text-brand-500 hover:underline text-left transition-colors flex items-center">
+                      <span>{selectedPatient.resource_fhir?.name?.[0]?.given?.[0]} {selectedPatient.resource_fhir?.name?.[0]?.family}</span>
+                      {selectedPatient.patient_seq !== undefined && (
+                        <span className="text-[11px] font-mono font-bold text-brand-650 bg-brand-50 dark:bg-brand-950/20 px-2 py-0.5 rounded border border-brand-150 dark:border-brand-900/30 ml-2 shadow-xs">
+                          {String(selectedPatient.patient_seq).padStart(4, '0')}
+                        </span>
+                      )}
                     </button>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center">
                       <User className="h-3 w-3 mr-1" />
@@ -626,24 +693,61 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
               </div>
             </div>
 
+            {/* Interactive Stats Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+              {/* Planned Sessions Box */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-900/60 p-4 rounded-xl border border-blue-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+                <div className="absolute -right-3 -bottom-3 opacity-15 dark:opacity-10 group-hover:scale-110 transition-transform duration-300">
+                  <Activity className="h-16 w-16 text-indigo-650 dark:text-indigo-400" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Remaining Sessions</span>
+                  <div className="h-6 w-6 rounded-md bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+                    <Activity className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-baseline space-x-2">
+                  <span className="text-3xl font-black text-slate-800 dark:text-white font-mono leading-none">
+                    {selectedPatient.resource_fhir?.planned_sessions !== undefined ? selectedPatient.resource_fhir.planned_sessions : 0}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400">sessions</span>
+                </div>
+                <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1.5 font-medium leading-none">Billed sessions left to conduct</p>
+              </div>
+
+              {/* Total Conducted Sessions Box */}
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-slate-800 dark:to-slate-900/60 p-4 rounded-xl border border-emerald-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+                <div className="absolute -right-3 -bottom-3 opacity-15 dark:opacity-10 group-hover:scale-110 transition-transform duration-300">
+                  <UserCheck className="h-16 w-16 text-emerald-650 dark:text-emerald-400" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Sessions Completed</span>
+                  <div className="h-6 w-6 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                    <UserCheck className="h-3.5 w-3.5" />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-baseline space-x-2">
+                  <span className="text-3xl font-black text-slate-800 dark:text-white font-mono leading-none">
+                    {logs.reduce((acc, log) => acc + (Number(log.resource_fhir?.sessions_conducted) || 0), 0)}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400">completed</span>
+                </div>
+                <p className="text-[9px] text-slate-400 dark:text-slate-500 mt-1.5 font-medium leading-none">Sum of all therapist sessions done</p>
+              </div>
+            </div>
+
 
 
             {/* Clinical Logging Timeline */}
             <div className="rounded-xl border-2 border-brand-500 bg-white p-6 shadow-md dark:bg-[#111827] dark:border-brand-500">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Clinical Notes
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center">
+                  <Activity className="h-4 w-4 mr-1.5 text-brand-500" />
+                  <span>Clinical Progress Notes</span>
                 </h4>
-                <div className="flex items-center space-x-2">
-                  <div className="flex items-center space-x-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 border border-blue-200 dark:border-blue-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
-                    <span>Planned Sessions:</span>
-                    <span className="font-extrabold font-mono text-xs">{patientSessions.filter(s => s.status === 'scheduled').reduce((acc, s) => acc + Math.max(1, Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / (45 * 60 * 1000))), 0)}</span>
-                  </div>
-                  <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-xs">
-                    <span>Total Sessions Completed:</span>
-                    <span className="font-extrabold font-mono text-xs">{patientSessions.filter(s => s.status === 'completed').reduce((acc, s) => acc + Math.max(1, Math.round((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / (45 * 60 * 1000))), 0)}</span>
-                  </div>
-                </div>
+                <span className="text-[10px] bg-brand-50 text-brand-600 font-bold px-2 py-0.5 rounded-full dark:bg-brand-950/20 dark:text-brand-400">
+                  {logs.length} logs
+                </span>
               </div>
 
               {currentUser && !isAdmin && !currentUser.can_view_medical_history ? (
@@ -658,16 +762,112 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                 <>
                   {/* Add Clinical Note Form */}
               <form onSubmit={handleAddLog} className="mt-4 space-y-3 pb-6 border-b border-slate-150 dark:border-slate-800">
+                {editingLogId && (
+                  <div className="bg-brand-50 border border-brand-200 text-brand-800 dark:bg-brand-950/20 dark:border-brand-900/30 dark:text-brand-400 p-2.5 rounded-lg flex items-center justify-between text-xs font-bold mb-2">
+                    <div className="flex items-center space-x-1.5">
+                      <Pencil className="h-3.5 w-3.5 animate-pulse" />
+                      <span>You are editing an existing clinical progress note.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingLogId(null);
+                        setNewLogSummary('');
+                        setLogSessionsCount(0);
+                        setLogDateMode('today');
+                      }}
+                      className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:underline text-[10px] uppercase font-bold"
+                    >
+                      Cancel Edit
+                    </button>
+                  </div>
+                )}
                 <div>
                   <textarea
                     required
                     rows={2}
                     value={newLogSummary}
                     onChange={(e) => setNewLogSummary(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 p-2.5 text-xs bg-slate-50 dark:bg-slate-800 dark:border-slate-700 focus:outline-none focus:bg-white focus:border-brand-500 text-slate-900 dark:text-white"
-                    placeholder="Append new clinical note (impairments, sessions progress, orthotic adjustments)..."
+                    className="w-full rounded-lg border border-slate-200 p-2.5 text-xs bg-slate-50 dark:bg-slate-800 dark:border-slate-700 focus:outline-none focus:bg-white focus:border-brand-500 text-slate-900 dark:text-white font-medium"
+                    placeholder={editingLogId ? "Edit the existing clinical note text..." : "Append new clinical note (impairments, sessions progress, orthotic adjustments)..."}
                   />
                 </div>
+
+                {/* Custom Date, Session Count & Staff Selection Inputs */}
+                <div className="grid grid-cols-12 gap-3 pb-2">
+                  <div className="col-span-12 md:col-span-4">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Conducting Practitioner</label>
+                    <select
+                      value={logStaffId}
+                      onChange={(e) => setLogStaffId(e.target.value)}
+                      className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    >
+                      {staffList.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.full_name} ({st.position_role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-12 md:col-span-5">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Clinical Log Date & Time</label>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex-1">
+                        {logDateMode === 'today' ? (
+                          <div className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/40 dark:border-slate-800 text-slate-500 italic flex items-center justify-between">
+                            <span>Now</span>
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 py-0.5 rounded uppercase dark:bg-emerald-950/40 dark:text-emerald-400">Live</span>
+                          </div>
+                        ) : (
+                          <input
+                            type="datetime-local"
+                            value={customLogDate}
+                            onChange={(e) => setCustomInvoiceDate(e.target.value)}
+                            className="w-full rounded border border-slate-200 px-2.5 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                          />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (logDateMode === 'today') {
+                            setLogDateMode('custom');
+                          } else {
+                            setLogDateMode('today');
+                          }
+                        }}
+                        className={`px-2.5 py-1.5 rounded text-[10px] font-bold border transition-colors shadow-xs cursor-pointer ${
+                          logDateMode === 'today'
+                            ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-750'
+                            : 'bg-brand-500 border-brand-500 text-white hover:bg-brand-600'
+                        }`}
+                      >
+                        {logDateMode === 'today' ? 'Choose' : 'Today'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="col-span-12 md:col-span-3">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Session Count</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={logSessionsCount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setLogSessionsCount('');
+                        } else {
+                          setLogSessionsCount(parseInt(val) || 0);
+                        }
+                      }}
+                      className="w-full rounded border border-slate-200 px-2.5 py-1 text-xs bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                    <span className="text-[9px] text-slate-400 block mt-0.5 leading-tight">Decrements from Planned.</span>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <label className="flex items-center space-x-1.5 cursor-pointer bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-slate-700 dark:text-slate-350 transition-colors shadow-xs">
@@ -699,9 +899,11 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                   <button
                     type="submit"
                     disabled={uploadingFile}
-                    className="bg-brand-500 text-white font-bold text-[11px] px-3.5 py-1.5 rounded-lg hover:bg-brand-600 transition-colors shadow disabled:opacity-50"
+                    className={`font-bold text-[11px] px-3.5 py-1.5 rounded-lg transition-colors shadow disabled:opacity-50 text-white ${
+                      editingLogId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-500 hover:bg-brand-600'
+                    }`}
                   >
-                    {uploadingFile ? 'Uploading...' : 'Add Clinical Log'}
+                    {uploadingFile ? 'Uploading...' : editingLogId ? 'Save Note Changes' : 'Add Clinical Log'}
                   </button>
                 </div>
               </form>
@@ -717,82 +919,121 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ triggerRefresh, trig
                     return (
                       <>
                         {displayedLogs.map((log) => {
-                    const author = staffList.find((st) => st.id === log.author_id);
-                    const authorName = author ? author.full_name : 'Clinic Specialist';
-                    const role = author ? author.position_role : 'Specialist';
-                    
-                    return (
-                      <div key={log.id} className="relative pl-8 flex items-start justify-between group">
-                        {/* Dot indicator */}
-                        <div className="absolute left-[9px] top-1.5 h-2 w-2 rounded-full bg-brand-500 border border-white dark:border-[#0B0F19]" />
-                        
-                        <div className="space-y-1.5 flex-1 pr-6">
-                          <div className="flex items-center space-x-2 text-[10px]">
-                            <span className="font-extrabold text-slate-800 dark:text-slate-300">{authorName} ({role})</span>
-                            <span className="text-slate-400">•</span>
-                            <span className="text-slate-400">{new Date(log.resource_fhir?.date || '').toLocaleString('en-IN')}</span>
-                          </div>
+                          const author = staffList.find((st) => st.id === log.author_id);
+                          const authorName = author ? author.full_name : 'Clinic Specialist';
+                          const role = author ? author.position_role : 'Specialist';
                           
-                          <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100 dark:bg-slate-800/40 dark:border-slate-700/60 font-medium">
-                            {log.resource_fhir?.summary}
-                          </p>
+                          return (
+                            <div key={log.id} className="relative pl-9 flex items-start justify-between group pb-4">
+                              {/* Avatar Initial Bubble */}
+                              <div className="absolute left-[1px] top-1 h-6 w-6 rounded-full bg-brand-500 text-white flex items-center justify-center font-black text-[10px] shadow-xs border border-white dark:border-[#0B0F19]">
+                                {authorName[0].toUpperCase()}
+                              </div>
+                              
+                              <div className="space-y-2 flex-1 pr-4 ml-1 min-w-0">
+                                <div className="flex items-center justify-between text-[11px] flex-wrap gap-1">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-extrabold text-slate-900 dark:text-slate-200">{authorName}</span>
+                                    <span className="text-slate-400 font-bold bg-slate-100 text-slate-655 px-2 py-0.5 rounded uppercase text-[9px] dark:bg-slate-800 dark:text-slate-400">{role}</span>
+                                  </div>
+                                  <span className="text-slate-450 dark:text-slate-500 font-bold bg-slate-50 border border-slate-200/50 px-2 py-0.5 rounded dark:bg-slate-900/60 dark:border-slate-800">{new Date(log.resource_fhir?.date || '').toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                                </div>
+                                
+                                <div className="bg-gradient-to-r from-slate-50/50 to-slate-50 dark:from-[#111827]/40 dark:to-[#111827]/10 p-4 rounded-xl border-l-4 border-l-brand-500 border border-slate-150 dark:border-slate-850 shadow-xs space-y-2 overflow-hidden">
+                                  <p className="text-sm text-slate-850 dark:text-slate-150 leading-relaxed font-semibold break-words whitespace-pre-wrap">
+                                    {log.resource_fhir?.summary}
+                                  </p>
 
-                          {/* Attachments if any */}
-                          {log.attachments && log.attachments.length > 0 && (
-                            <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-lg w-fit text-[10px] text-slate-655 dark:text-slate-400 mt-2 border border-slate-200 dark:border-slate-700">
-                              <Paperclip className="h-3.5 w-3.5 text-brand-500" />
-                              {log.attachments[0].filePath ? (
-                                <button 
-                                  onClick={() => handleViewPrivateDocument(log.attachments[0].filePath, log.attachments[0].name)}
-                                  className="font-bold text-brand-500 dark:text-brand-400 hover:underline flex items-center text-left focus:outline-none"
-                                  title="Open secure temporary document link"
+                                  {/* Session conducted indicator if present */}
+                                  {Number(log.resource_fhir?.sessions_conducted) > 0 && (
+                                    <div className="inline-flex items-center space-x-1 bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30">
+                                      <span>Conducted: {log.resource_fhir.sessions_conducted} {Number(log.resource_fhir.sessions_conducted) === 1 ? 'Session' : 'Sessions'}</span>
+                                    </div>
+                                  )}
+
+                                  {/* Attachments if any */}
+                                  {log.attachments && log.attachments.length > 0 && (
+                                    <div className="flex items-center space-x-1.5 bg-white dark:bg-[#0B0F19] px-2.5 py-1.5 rounded-lg w-fit text-[10px] text-slate-655 dark:text-slate-400 mt-2 border border-slate-200 dark:border-slate-800">
+                                      <Paperclip className="h-3.5 w-3.5 text-brand-500" />
+                                      {log.attachments[0].filePath ? (
+                                        <button 
+                                          onClick={() => handleViewPrivateDocument(log.attachments[0].filePath, log.attachments[0].name)}
+                                          className="font-bold text-brand-500 dark:text-brand-400 hover:underline flex items-center text-left focus:outline-none"
+                                          title="Open secure temporary document link"
+                                        >
+                                          {log.attachments[0].name}
+                                        </button>
+                                      ) : log.attachments[0].url ? (
+                                        <a 
+                                          href={log.attachments[0].url} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer" 
+                                          className="font-bold text-brand-500 dark:text-brand-400 hover:underline flex items-center"
+                                          title="Open uploaded file"
+                                        >
+                                          {log.attachments[0].name}
+                                        </a>
+                                      ) : (
+                                        <span className="font-semibold">{log.attachments[0].name}</span>
+                                      )}
+                                      <span className="text-[9px] text-slate-400 ml-1">({(log.attachment_size_bytes / 1024).toFixed(0)} KB)</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col items-stretch opacity-0 group-hover:opacity-100 transition-all self-center space-y-1 ml-2 flex-shrink-0 select-none">
+                                {/* Edit Log Trigger */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingLogId(log.id);
+                                    setNewLogSummary(log.resource_fhir?.summary || '');
+                                    setLogSessionsCount(log.resource_fhir?.sessions_conducted || 0);
+                                    setLogStaffId(log.author_id);
+                                    if (log.resource_fhir?.date) {
+                                      setLogDateMode('custom');
+                                      setCustomInvoiceDate(log.resource_fhir.date.substring(0, 16));
+                                    } else {
+                                      setLogDateMode('today');
+                                    }
+                                    detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }}
+                                  className="text-slate-400 hover:text-brand-500 p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex items-center space-x-1 cursor-pointer w-full justify-start"
+                                  title="Edit this clinical progress log entry"
                                 >
-                                  {log.attachments[0].name}
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  <span className="text-[9px] font-bold">Edit</span>
                                 </button>
-                              ) : log.attachments[0].url ? (
-                                <a 
-                                  href={log.attachments[0].url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  className="font-bold text-brand-500 dark:text-brand-400 hover:underline flex items-center"
-                                  title="Open uploaded file"
-                                >
-                                  {log.attachments[0].name}
-                                </a>
-                              ) : (
-                                <span className="font-semibold">{log.attachments[0].name}</span>
-                              )}
-                              <span className="text-[9px] text-slate-400 ml-1">({(log.attachment_size_bytes / 1024).toFixed(0)} KB)</span>
-                            </div>
-                          )}
-                        </div>
 
-                        {/* Hard Delete Trigger */}
-                        <button
-                          onClick={() => handleDeleteLog(log.id)}
-                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex items-center space-x-1 cursor-pointer"
-                          title="Permanently delete clinical progress log and attached files"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="text-[9px] font-bold">Delete</span>
-                        </button>
-                      </div>
+                                {/* Hard Delete Trigger */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLog(log.id)}
+                                  className="text-slate-400 hover:text-red-500 p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all flex items-center space-x-1 cursor-pointer w-full justify-start"
+                                  title="Permanently delete clinical progress log and attached files"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="text-[9px] font-bold">Delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {logs.length > 5 && (
+                          <div className="pt-2 text-center">
+                            <button
+                              onClick={() => setShowAllLogs(!showAllLogs)}
+                              className="text-xs font-bold text-brand-500 hover:text-brand-600 dark:text-brand-400"
+                            >
+                              {showAllLogs ? 'Show Less' : `Show All Logs (${logs.length})`}
+                            </button>
+                          </div>
+                        )}
+                      </>
                     );
-                  })}
-                  {logs.length > 5 && (
-                    <div className="pt-2 text-center">
-                      <button
-                        onClick={() => setShowAllLogs(!showAllLogs)}
-                        className="text-xs font-bold text-brand-500 hover:text-brand-600 dark:text-brand-400"
-                      >
-                        {showAllLogs ? 'Show Less' : `Show All Logs (${logs.length})`}
-                      </button>
-                    </div>
-                  )}
-                  </>
-                )
-              })()
-            )}
+                  })()
+                )}
               </div>
             </>
           )}

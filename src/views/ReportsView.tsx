@@ -10,8 +10,8 @@ import {
   TrendingDown,
   DollarSign
 } from 'lucide-react';
-import { dataService, formatHours } from '../services/dataService';
-import type { User as StaffUser, ScheduledSession, BusinessExpense, Invoice } from '../services/dataService';
+import { dataService, formatHours, getEffectiveInvoices } from '../services/dataService';
+import type { User as StaffUser, ScheduledSession, BusinessExpense, Invoice, ClinicalLog, Tenant } from '../services/dataService';
 
 import { AttendanceView } from './AttendanceView';
 
@@ -27,6 +27,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
   const [sessions, setSessions] = useState<ScheduledSession[]>([]);
   const [expenses, setExpenses] = useState<BusinessExpense[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [clinicalLogs, setClinicalLogs] = useState<ClinicalLog[]>([]);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   
   // Hovered slice for pie chart interactivity
   const [hoveredSlice, setHoveredSlice] = useState<{ name: string; value: number; percentage: number; color: string } | null>(null);
@@ -46,6 +48,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
 
   const loadReportsData = async () => {
     try {
+      const curTenant = await dataService.getTenant();
+      setTenant(curTenant);
+
       const staff = await dataService.getUsers();
       setStaffList(staff);
 
@@ -56,7 +61,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
       setExpenses(exps);
 
       const invs = await dataService.getInvoices();
-      setInvoices(invs);
+      setInvoices(getEffectiveInvoices(invs));
+
+      const logs = await dataService.getAllClinicalLogs();
+      setClinicalLogs(logs);
     } catch (err) {
       console.error('Failed to load reports view data:', err);
     }
@@ -135,25 +143,28 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ triggerRefresh, trigge
     return true;
   });
 
+  const filteredLogs = clinicalLogs.filter((log) => {
+    const logDate = log.resource_fhir?.date || '';
+    if (!logDate) return false;
+    const sDate = logDate.split('T')[0];
+    if (fromDate && sDate < fromDate) return false;
+    if (toDate && sDate > toDate) return false;
+    return true;
+  });
+
   const totalAppointmentsCount = filteredSessions.length;
-  const totalCompletedSessionsCount = filteredSessions.filter(s => s.status === 'completed').length;
+  const totalCompletedSessionsCount = filteredLogs.reduce((sum, log) => sum + (Number(log.resource_fhir?.sessions_conducted) || 0), 0);
 
   // Helper to get productivity statistics for a practitioner
   const getProductivityForStaff = (staffId: string) => {
     const staffSessions = filteredSessions.filter(s => s.practitioner_id === staffId);
     const scheduledCount = staffSessions.filter(s => s.status === 'scheduled' || !s.status).length;
-    const completedCount = staffSessions.filter(s => s.status === 'completed').length;
     const cancelledCount = staffSessions.filter(s => s.status === 'cancelled').length;
 
-    let completedHours = 0;
-    staffSessions.forEach((s) => {
-      if (s.status === 'completed' && s.start_time && s.end_time) {
-        const start = new Date(s.start_time).getTime();
-        const end = new Date(s.end_time).getTime();
-        const hrs = (end - start) / (1000 * 60 * 60);
-        if (hrs > 0) completedHours += hrs;
-      }
-    });
+    const staffLogs = filteredLogs.filter(log => log.author_id === staffId);
+    const completedCount = staffLogs.reduce((sum, log) => sum + (Number(log.resource_fhir?.sessions_conducted) || 0), 0);
+    const sessionDuration = tenant?.session_duration_minutes || 45;
+    const completedHours = (completedCount * sessionDuration) / 60;
 
     return {
       total: staffSessions.length,

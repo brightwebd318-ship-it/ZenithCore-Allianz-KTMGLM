@@ -12,8 +12,8 @@ import {
   Camera,
   X
 } from 'lucide-react';
-import { dataService, formatHours } from '../services/dataService';
-import type { Tenant, User as StaffUser, Attendance } from '../services/dataService';
+import { dataService, formatHours, getEffectiveInvoices } from '../services/dataService';
+import type { Tenant, User as StaffUser, Attendance, ClinicalLog } from '../services/dataService';
 
 interface DashboardViewProps {
   tenant: Tenant | null;
@@ -88,7 +88,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
     try {
       const patients = await dataService.getPatients();
       const appointments = await dataService.getScheduledSessions();
-      const invoices = await dataService.getInvoices();
+      const rawInvoices = await dataService.getInvoices();
+      const invoices = getEffectiveInvoices(rawInvoices);
 
       // Current calendar year & month helper
       const now = new Date();
@@ -138,32 +139,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ tenant, setActiveT
         return pDate.getFullYear() === currentYear && pDate.getMonth() === currentMonth;
       }).length;
 
-        // Count my completed sessions and hours (Current month only)
-        const myCompletedSessions = appointments.filter((app) => {
-          if (app.practitioner_id !== currentUser?.id) return false;
-          if (app.status !== 'completed') return false;
-          if (!app.start_time) return false;
-          const appDate = new Date(app.start_time);
-          return appDate.getFullYear() === currentYear && appDate.getMonth() === currentMonth;
+        // Count my completed sessions and hours from clinical logs (Current month only)
+        let clinicalLogs: ClinicalLog[] = [];
+        try {
+          clinicalLogs = await dataService.getAllClinicalLogs();
+        } catch (logErr) {
+          console.warn("Failed to load clinical logs for dashboard statistics:", logErr);
+        }
+
+        const myLogsThisMonth = clinicalLogs.filter((log) => {
+          if (log.author_id !== currentUser?.id) return false;
+          if (!log.resource_fhir?.date) return false;
+          const logDate = new Date(log.resource_fhir.date);
+          return logDate.getFullYear() === currentYear && logDate.getMonth() === currentMonth;
         });
 
+        const myCompletedCount = myLogsThisMonth.reduce((sum, log) => sum + (Number(log.resource_fhir?.sessions_conducted) || 0), 0);
         const sessionDuration = tenant?.session_duration_minutes || 45;
-
-        const myCompletedCount = myCompletedSessions.reduce((sum, app) => {
-          if (!app.start_time || !app.end_time) return sum;
-          const durationMs = new Date(app.end_time).getTime() - new Date(app.start_time).getTime();
-          if (isNaN(durationMs) || durationMs <= 0) return sum + 1;
-          const count = Math.max(1, Math.round(durationMs / (sessionDuration * 60 * 1000)));
-          return sum + count;
-        }, 0);
-
-        const myCompletedHours = myCompletedSessions.reduce((sum, app) => {
-          if (!app.start_time || !app.end_time) return sum;
-          const durationMs = new Date(app.end_time).getTime() - new Date(app.start_time).getTime();
-          if (isNaN(durationMs) || durationMs <= 0) return sum;
-          const count = Math.max(1, Math.round(durationMs / (sessionDuration * 60 * 1000)));
-          return sum + (count * sessionDuration / 60);
-        }, 0);
+        const myCompletedHours = (myCompletedCount * sessionDuration) / 60;
 
       setStats({
         patientsCount: patientsThisMonth,

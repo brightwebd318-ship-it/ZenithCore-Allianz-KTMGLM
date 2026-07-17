@@ -53,7 +53,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         // Simulate Login in offline Mock Mode
         const localUsersData = localStorage.getItem('praxdoc_users');
         const users = localUsersData ? JSON.parse(localUsersData) : [];
-        
+
         // Default seeded developer credentials for easy mock test access
         const defaultAdmin = {
           email: 'dibin@PraxDoc.com',
@@ -61,8 +61,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
         };
 
         const matchedUser = users.find(
-          (u: any) => u.email.toLowerCase() === email.trim().toLowerCase() && 
-                      (u.password === password || password === 'password')
+          (u: any) => u.email.toLowerCase() === email.trim().toLowerCase() &&
+            (u.password === password || password === 'password')
         );
 
         const isDefaultDev = email.trim().toLowerCase() === defaultAdmin.email && password === defaultAdmin.password;
@@ -114,24 +114,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F4F7F9] dark:bg-[#0B0F19] p-4 font-sans transition-colors duration-200">
-      
+
       {/* Decorative Blur Orbs */}
       <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-brand-400/20 dark:bg-brand-500/10 rounded-full blur-3xl -z-10 animate-pulse duration-4000" />
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-emerald-400/15 dark:bg-emerald-500/5 rounded-full blur-3xl -z-10" />
 
       {/* Main Glassmorphic Card */}
       <div className="w-full max-w-md bg-white/80 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-200/80 dark:border-slate-800/80 p-8 shadow-2xl transition-all duration-300">
-        
+
         {/* Brand Header */}
         <div className="flex flex-col items-center justify-center mb-8">
-          <img 
-            src="/logo.png" 
-            alt="PraxDoc Logo" 
+          <img
+            src="/logo.png"
+            alt="PraxDoc Logo"
             className="h-14 w-auto object-contain mb-2"
           />
-          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">
-            Clinical SaaS Portal
-          </p>
         </div>
 
         {/* Info alerts */}
@@ -213,9 +210,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
 
       {/* PraxDoc Logo Below Login Window */}
       <div className="mt-6 flex flex-col items-center justify-center">
-        <img 
-          src="/praxdoc_logo.png" 
-          alt="PraxDoc Logo" 
+        <img
+          src="/praxdoc_logo.png"
+          alt="PraxDoc Logo"
           className="h-44 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity"
         />
       </div>

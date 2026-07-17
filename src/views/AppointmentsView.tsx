@@ -489,6 +489,10 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
 
                   const isSelected = session.id === selectedAppointmentId;
 
+                  const durationMs = new Date(session.end_time).getTime() - new Date(session.start_time).getTime();
+                  const sessionDuration = tenant?.session_duration_minutes || 45;
+                  const sessionCount = Math.max(1, Math.round(durationMs / (sessionDuration * 60 * 1000)));
+
                   return (
                     <div
                       key={session.id}
@@ -504,6 +508,10 @@ export const AppointmentsView: React.FC<AppointmentsViewProps> = ({
                           <span className="text-brand-500 dark:text-brand-400">{timeStr}</span>
                           <span>•</span>
                           <span>{dateStr}</span>
+                          <span>•</span>
+                          <span className="bg-brand-50 text-brand-700 dark:bg-brand-950/20 dark:text-brand-400 px-1.5 py-0.5 rounded font-extrabold normal-case">
+                            {sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}
+                          </span>
                         </div>
 
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">{pName}</h4>

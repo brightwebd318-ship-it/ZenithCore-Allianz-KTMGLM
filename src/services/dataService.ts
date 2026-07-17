@@ -20,11 +20,14 @@ import {
   updatePatientConsentAction,
   updatePatientGstAction,
   getClinicalLogsAction,
+  getAllClinicalLogsAction,
   addClinicalLogAction,
   deleteClinicalLogAction,
+  updateClinicalLogAction,
   getInvoicesAction,
   addInvoiceAction,
   updateInvoicePaymentStatusAction,
+  deleteInvoiceAction,
   getInventoryAction,
   deleteInventoryItemAction,
   addInventoryItemAction,
@@ -53,7 +56,24 @@ import {
   deleteStaffAction,
   deleteExpenseAction,
   updateExpenseAction,
+  getStaffRolesAction,
+  addStaffRoleAction,
+  deleteStaffRoleAction,
 } from '../app/actions';
+
+export const capitalizeName = (str: string): string => {
+  if (!str) return '';
+  return str
+    .trim()
+    .split(/\s+/)
+    .map(word => {
+      return word
+        .split('-')
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join('-');
+    })
+    .join(' ');
+};
 
 const getAuthToken = async (): Promise<string> => {
   {
@@ -87,6 +107,16 @@ export const formatHours = (hoursDecimal: number): string => {
   return hrStr || minStr || '0 hr';
 };
 
+export const getEffectiveInvoices = (allInvoices: Invoice[]): Invoice[] => {
+  const sorted = [...allInvoices].sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+  const map = new Map<string, Invoice>();
+  for (const inv of sorted) {
+    const baseId = inv.resource_fhir?.original_invoice_id || inv.id.replace(/-EDITED/g, '');
+    map.set(baseId, inv);
+  }
+  return Array.from(map.values());
+};
+
 // Types corresponding exactly to PostgreSQL schema
 export interface Tenant {
   id: string;
@@ -107,7 +137,7 @@ export interface User {
   tenant_id: string;
   email: string;
   full_name: string;
-  position_role: 'Admin' | 'Senior Therapist' | 'Receptionist';
+  position_role: string;
   medical_council_registration_no: string;
   can_view_personal_data: boolean;
   can_view_medical_history: boolean;
@@ -124,6 +154,7 @@ export interface User {
 export interface Patient {
   id: string;
   tenant_id: string;
+  patient_seq?: number;
   abha_number: string | null;
   abha_address: string | null;
   gstin: string | null;
@@ -144,6 +175,7 @@ export interface ClinicalLog {
   attachments: any; // Attachment metadata list
   attachment_size_bytes: number;
   is_deleted: boolean;
+  created_at?: string;
 }
 
 export interface Invoice {
@@ -152,7 +184,7 @@ export interface Invoice {
   patient_id: string;
   generated_by: string | null;
   session_count_incremented: number;
-  associated_practitioner_id: string;
+  associated_practitioner_id: string | null;
   apply_gst: boolean;
   cgst_rate: number;
   sgst_rate: number;
@@ -818,15 +850,20 @@ export const dataService = {
   addUser: async (user: Omit<User, 'id' | 'tenant_id'> & { id?: string }): Promise<User> => {
     const tenant = await dataService.getTenant();
     
+    const formattedFullName = user.full_name ? capitalizeName(user.full_name) : '';
     const resourceFhir = {
       ...(user.resource_fhir || {}),
       can_manage_staff: user.can_manage_staff !== undefined ? user.can_manage_staff : (user.position_role === 'Admin'),
       can_manage_attendance: user.can_manage_attendance !== undefined ? user.can_manage_attendance : (user.position_role === 'Admin' || user.position_role === 'Receptionist'),
     };
+    if (resourceFhir.name?.[0]) {
+      resourceFhir.name[0].text = formattedFullName;
+    }
 
     const { can_manage_staff, can_manage_attendance, ...rest } = user;
     const newUser = {
       ...rest,
+      full_name: formattedFullName,
       id: user.id || generateUUID(),
       tenant_id: tenant.id,
       resource_fhir: resourceFhir,
@@ -852,13 +889,14 @@ export const dataService = {
     email: string,
     password?: string,
     fullName?: string,
-    role?: 'Admin' | 'Senior Therapist' | 'Receptionist',
+    role?: string,
     targetUserId?: string
   ): Promise<string> => {
     {
       const tenant = await dataService.getTenant();
       const token = await getAuthToken();
-      return createStaffAuthAction(token, email, password, fullName, role, tenant.id, targetUserId);
+      const formattedFullName = fullName ? capitalizeName(fullName) : '';
+      return createStaffAuthAction(token, email, password, formattedFullName, role, tenant.id, targetUserId);
       }
   },
 
@@ -893,6 +931,19 @@ export const dataService = {
 
   addPatient: async (patient: Omit<Patient, 'id' | 'tenant_id'>): Promise<Patient> => {
     const tenant = await dataService.getTenant();
+    
+    const resourceFhir = { ...(patient.resource_fhir || {}) };
+    if (resourceFhir.name?.[0]) {
+      const nameObj = { ...resourceFhir.name[0] };
+      if (nameObj.given && nameObj.given[0]) {
+        nameObj.given = [capitalizeName(nameObj.given[0])];
+      }
+      if (nameObj.family) {
+        nameObj.family = capitalizeName(nameObj.family);
+      }
+      resourceFhir.name = [nameObj];
+    }
+
     const newPatient: Patient = {
       ...patient,
       id: generateUUID(),
@@ -900,6 +951,7 @@ export const dataService = {
       abha_number: patient.abha_number && patient.abha_number.trim() !== '' ? patient.abha_number.trim() : null,
       abha_address: patient.abha_address && patient.abha_address.trim() !== '' ? patient.abha_address.trim() : null,
       gstin: patient.gstin && patient.gstin.trim() !== '' ? patient.gstin.trim() : null,
+      resource_fhir: resourceFhir,
     };
 
     {
@@ -956,42 +1008,142 @@ export const dataService = {
       }
   },
 
+  getAllClinicalLogs: async (): Promise<ClinicalLog[]> => {
+    {
+      const token = await getAuthToken();
+      return getAllClinicalLogsAction(token);
+    }
+  },
+
   addClinicalLog: async (
     patientId: string,
     summary: string,
-    attachments: Array<{ name: string; type: string; size: number }> = []
+    attachments: Array<{ name: string; type: string; size: number }> = [],
+    createdAt?: string,
+    sessionsCount?: number,
+    authorId?: string
   ): Promise<ClinicalLog> => {
     const tenant = await dataService.getTenant();
     const currentUser = await dataService.getCurrentUser();
     const totalSize = attachments.reduce((sum, item) => sum + item.size, 0);
 
+    const logDate = createdAt || new Date().toISOString();
+
     const newLog: ClinicalLog = {
       id: generateUUID(),
       tenant_id: tenant.id,
       patient_id: patientId,
-      author_id: currentUser ? currentUser.id : 'u1111111-1111-1111-1111-111111111111',
+      author_id: authorId || (currentUser ? currentUser.id : 'u1111111-1111-1111-1111-111111111111'),
+      created_at: logDate,
       resource_fhir: {
         resourceType: 'ClinicalImpression',
         status: 'completed',
         summary: summary,
-        date: new Date().toISOString(),
+        date: logDate,
+        sessions_conducted: sessionsCount || 0
       },
       attachments: attachments,
       attachment_size_bytes: totalSize,
       is_deleted: false,
     };
 
+    // Decrement planned_sessions on patient
+    if (sessionsCount && sessionsCount > 0) {
+      try {
+        const patients = await dataService.getPatients();
+        const patient = patients.find(p => p.id === patientId);
+        if (patient) {
+          const currentPlanned = patient.resource_fhir?.planned_sessions !== undefined ? Number(patient.resource_fhir.planned_sessions) : 0;
+          const updatedPlanned = currentPlanned - sessionsCount;
+          const updatedResource = {
+            ...patient.resource_fhir,
+            planned_sessions: updatedPlanned
+          };
+          await dataService.updatePatientResource(patientId, updatedResource);
+        }
+      } catch (patientErr) {
+        console.warn("Failed to update patient planned_sessions count during clinical log addition:", patientErr);
+      }
+    }
+
     {
       const token = await getAuthToken();
       return addClinicalLogAction(token, newLog);
-      }
+    }
   },
 
   deleteClinicalLog: async (logId: string): Promise<void> => {
-    {
-      const token = await getAuthToken();
-      await deleteClinicalLogAction(token, logId);
+    const token = await getAuthToken();
+    try {
+      const allLogs = await getAllClinicalLogsAction(token);
+      const log = allLogs.find(l => l.id === logId);
+      if (log && log.patient_id) {
+        const sessionsCount = Number(log.resource_fhir?.sessions_conducted || 0);
+        if (sessionsCount > 0) {
+          const patients = await dataService.getPatients();
+          const patient = patients.find(p => p.id === log.patient_id);
+          if (patient) {
+            const currentPlanned = patient.resource_fhir?.planned_sessions !== undefined ? Number(patient.resource_fhir.planned_sessions) : 0;
+            const updatedPlanned = currentPlanned + sessionsCount;
+            const updatedResource = {
+              ...patient.resource_fhir,
+              planned_sessions: updatedPlanned
+            };
+            await dataService.updatePatientResource(log.patient_id, updatedResource);
+          }
+        }
       }
+    } catch (err) {
+      console.warn("Failed to increment planned sessions on log deletion:", err);
+    }
+    await deleteClinicalLogAction(token, logId);
+  },
+
+  updateClinicalLog: async (
+    logId: string,
+    patientId: string,
+    summary: string,
+    sessionsCount: number,
+    authorId: string,
+    createdAt: string
+  ): Promise<ClinicalLog> => {
+    const token = await getAuthToken();
+    try {
+      const logs = await getClinicalLogsAction(token, patientId);
+      const originalLog = logs.find(l => l.id === logId);
+      if (originalLog) {
+        const oldSessions = Number(originalLog.resource_fhir?.sessions_conducted || 0);
+        const diff = sessionsCount - oldSessions;
+        if (diff !== 0) {
+          const patients = await dataService.getPatients();
+          const patient = patients.find(p => p.id === patientId);
+          if (patient) {
+            const currentPlanned = patient.resource_fhir?.planned_sessions !== undefined ? Number(patient.resource_fhir.planned_sessions) : 0;
+            const updatedPlanned = currentPlanned - diff;
+            const updatedResource = {
+              ...patient.resource_fhir,
+              planned_sessions: updatedPlanned
+            };
+            await dataService.updatePatientResource(patientId, updatedResource);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to update patient planned sessions during log edit:", err);
+    }
+
+    const updates = {
+      author_id: authorId,
+      created_at: createdAt,
+      resource_fhir: {
+        resourceType: 'ClinicalImpression',
+        status: 'completed',
+        summary: summary,
+        date: createdAt,
+        sessions_conducted: sessionsCount
+      }
+    };
+    return updateClinicalLogAction(token, logId, updates);
   },
 
   // INVOICES
@@ -1009,7 +1161,8 @@ export const dataService = {
     applyGst: boolean,
     baseAmount: number,
     customItems?: Array<{ name: string; quantity: number; rate: number }>,
-    sessionDescription?: string
+    sessionDescription?: string,
+    createdAt?: string
   ): Promise<Invoice> => {
     const tenant = await dataService.getTenant();
     
@@ -1053,8 +1206,8 @@ export const dataService = {
       igst_rate: 0,
       computed_tax_amount,
       total_amount,
-      payment_status: 'pending',
-      created_at: new Date().toISOString(),
+      payment_status: 'paid',
+      created_at: createdAt || new Date().toISOString(),
       resource_fhir: {
         resourceType: 'Invoice',
         status: 'issued',
@@ -1063,7 +1216,7 @@ export const dataService = {
         totalGross: { value: total_amount, currency: 'INR' },
         lineItem: [
           ...(sessions > 0 ? [{
-            description: 'Therapy Session Units',
+            description: sessionDescription || 'Therapy Session Units',
             quantity: sessions,
             priceComponent: [{
               type: 'base',
@@ -1087,6 +1240,23 @@ export const dataService = {
     {
       const token = await getAuthToken();
       const res = await addInvoiceAction(token, newInvoice);
+
+      // Increment planned_sessions on patient
+      try {
+        const patients = await dataService.getPatients();
+        const patient = patients.find(p => p.id === patientId);
+        if (patient) {
+          const currentPlanned = patient.resource_fhir?.planned_sessions !== undefined ? Number(patient.resource_fhir.planned_sessions) : 0;
+          const updatedPlanned = currentPlanned + sessions;
+          const updatedResource = {
+            ...patient.resource_fhir,
+            planned_sessions: updatedPlanned
+          };
+          await dataService.updatePatientResource(patientId, updatedResource);
+        }
+      } catch (patientErr) {
+        console.warn("Failed to update patient planned_sessions count during invoice creation:", patientErr);
+      }
       
       // Notify admins of new bill
       try {
@@ -1105,14 +1275,27 @@ export const dataService = {
       }
       
       return res;
-      }
+    }
+  },
+  
+  addInvoiceAction: async (token: string, payload: any): Promise<Invoice> => {
+    return addInvoiceAction(token, payload);
+  },
+
+  getAuthToken: async (): Promise<string> => {
+    return getAuthToken();
   },
 
   updateInvoiceStatus: async (invoiceId: string, status: Invoice['payment_status']): Promise<Invoice> => {
     {
       const token = await getAuthToken();
       return updateInvoicePaymentStatusAction(token, invoiceId, status.toLowerCase());
-      }
+    }
+  },
+
+  deleteInvoice: async (invoiceId: string): Promise<boolean> => {
+    const token = await getAuthToken();
+    return deleteInvoiceAction(token, invoiceId);
   },
 
   // INVENTORY
@@ -1722,33 +1905,38 @@ export const dataService = {
     if (!staff) throw new Error('Staff not found');
 
     const baseAmount = staff.base_salary_monthly || 0;
-    const completedSessions = sessions.filter((s) => {
-      if (s.practitioner_id !== staffId) return false;
-      if (s.status !== 'completed') return false; // Only completed / done appointments count for salary bonus!
-      return s.start_time.startsWith(targetMonth);
+
+    let clinicalLogs: ClinicalLog[] = [];
+    try {
+      clinicalLogs = await dataService.getAllClinicalLogs();
+    } catch (err) {
+      console.warn("Failed to fetch clinical logs for payout calculation, using empty array", err);
+    }
+
+    const staffLogs = clinicalLogs.filter((log) => {
+      if (log.author_id !== staffId) return false;
+      const logDate = log.resource_fhir?.date || '';
+      return logDate.startsWith(targetMonth);
     });
 
-    const countInMonth = completedSessions.length;
-    let totalClinicalHours = 0;
-    completedSessions.forEach((s) => {
-      if (s.start_time && s.end_time) {
-        const start = new Date(s.start_time).getTime();
-        const end = new Date(s.end_time).getTime();
-        const hrs = (end - start) / (1000 * 60 * 60);
-        if (hrs > 0) totalClinicalHours += hrs;
-      }
-    });
-
-    // Fetch threshold hours from tenant configuration (default: 100)
+    let sessionDuration = 45;
     let thresholdLimit = 100;
     try {
       const tenant = await dataService.getTenant();
-      if (tenant && tenant.bonus_threshold_hours !== undefined) {
-        thresholdLimit = tenant.bonus_threshold_hours;
+      if (tenant) {
+        if (tenant.session_duration_minutes !== undefined) {
+          sessionDuration = tenant.session_duration_minutes;
+        }
+        if (tenant.bonus_threshold_hours !== undefined) {
+          thresholdLimit = tenant.bonus_threshold_hours;
+        }
       }
     } catch (e) {
-      console.warn("Failed to get tenant config for threshold hours:", e);
+      console.warn("Failed to get tenant config for threshold hours or session duration:", e);
     }
+
+    const countInMonth = staffLogs.reduce((sum, log) => sum + (Number(log.resource_fhir?.sessions_conducted) || 0), 0);
+    const totalClinicalHours = (countInMonth * sessionDuration) / 60;
 
     // Formula: (baseAmount / 100) * Math.max(0, totalClinicalHours - thresholdLimit)
     const extraHours = Math.max(0, totalClinicalHours - thresholdLimit);
@@ -1813,11 +2001,12 @@ export const dataService = {
       adminId = authData.user.id;
       }
 
+    const formattedAdminName = onboardingData.admin_name ? capitalizeName(onboardingData.admin_name) : '';
     const firstAdmin: User & { password?: string } = {
       id: adminId,
       tenant_id: tenantId,
       email: onboardingData.admin_email,
-      full_name: onboardingData.admin_name,
+      full_name: formattedAdminName,
       position_role: 'Admin',
       medical_council_registration_no: 'IMR/ADMIN-TEMP',
       can_view_personal_data: true,
@@ -1827,7 +2016,7 @@ export const dataService = {
       can_manage_staff: true,
       base_salary_monthly: 80000,
       bonus_system_enabled: true,
-      resource_fhir: { resourceType: 'Practitioner', active: true, name: [{ text: onboardingData.admin_name }] },
+      resource_fhir: { resourceType: 'Practitioner', active: true, name: [{ text: formattedAdminName }] },
     };
 
     {
@@ -1853,8 +2042,15 @@ export const dataService = {
       const token = await getAuthToken();
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) throw new Error("No active user session found.");
-      await completeOnboardingAction(token, tenantId, onboardingData, userData.user.id);
-      }
+      
+      const updatedData = {
+        ...onboardingData,
+        admin_name: onboardingData.admin_name ? capitalizeName(onboardingData.admin_name) : ''
+      };
+      
+      await completeOnboardingAction(token, tenantId, updatedData, userData.user.id);
+      cachedTenant = null;
+    }
   },
 
 
@@ -1987,6 +2183,29 @@ export const dataService = {
 
   // CLINICAL LOGS STUBS
   softDeleteClinicalLog: async (...args: any[]): Promise<void> => {},
+  
+  clearCache: () => {
+    cachedTenant = null;
+  },
+
+  // STAFF ROLES
+  getStaffRoles: async (): Promise<Array<{ id: string; role_name: string }>> => {
+    try {
+      const token = await getAuthToken();
+      return await getStaffRolesAction(token);
+    } catch (err) {
+      console.warn("Using offline fallback roles:", err);
+      return [];
+    }
+  },
+  addStaffRole: async (roleName: string): Promise<any> => {
+    const token = await getAuthToken();
+    return addStaffRoleAction(token, roleName);
+  },
+  deleteStaffRole: async (roleId: string): Promise<void> => {
+    const token = await getAuthToken();
+    await deleteStaffRoleAction(token, roleId);
+  }
 };
 
 export interface Attendance {
